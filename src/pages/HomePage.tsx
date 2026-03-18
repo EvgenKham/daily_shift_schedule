@@ -1,9 +1,25 @@
 import { Button, Card, Col, Empty, Row, Space, Statistic, Typography } from 'antd'
 import { Link } from 'react-router-dom'
+import { loadJson } from '../shared/storage/localStorageJson'
 import { getGreeting } from '../shared/time/greeting'
+
+type Settings = {
+  userName: string
+  substationNumber: number | null
+  brigades: unknown[]
+}
+
+const STORAGE_KEY = 'dss_settings_v1'
 
 export function HomePage() {
   const now = new Date()
+  const settings = loadJson<Settings>(STORAGE_KEY)
+  const userName = settings?.userName?.trim() || '—'
+  const substation =
+    settings?.substationNumber != null ? `№ ${settings.substationNumber}` : '—'
+  const brigadesCount = Array.isArray(settings?.brigades)
+    ? settings?.brigades.length
+    : null
 
   return (
     <Space direction="vertical" size={16} style={{ display: 'flex' }}>
@@ -29,17 +45,20 @@ export function HomePage() {
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="Подстанция" value="—" />
+            <Statistic title="Подстанция" value={substation} />
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="Бригад (настроено)" value="—" />
+            <Statistic
+              title="Бригад (настроено)"
+              value={brigadesCount ?? '—'}
+            />
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="Пользователь" value="—" />
+            <Statistic title="Пользователь" value={userName} />
           </Card>
         </Col>
       </Row>
