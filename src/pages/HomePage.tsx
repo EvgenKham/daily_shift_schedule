@@ -22,9 +22,9 @@ export function HomePage() {
     : null
 
   return (
-    <Space direction="vertical" size={16} style={{ display: 'flex' }}>
+    <Space orientation="vertical" size={16} style={{ display: 'flex' }}>
       <Card>
-        <Space direction="vertical" size={8} style={{ display: 'flex' }}>
+        <Space orientation="vertical" size={8} style={{ display: 'flex' }}>
           <Typography.Title level={3} style={{ margin: 0 }}>
             {getGreeting(now)}!
           </Typography.Title>

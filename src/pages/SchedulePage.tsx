@@ -10,9 +10,9 @@ export function SchedulePage() {
   }
 
   return (
-    <Space direction="vertical" size={16} style={{ display: 'flex' }}>
+    <Space orientation="vertical" size={16} style={{ display: 'flex' }}>
       <Card title="График (месяц)">
-        <Space direction="vertical" size={12} style={{ display: 'flex' }}>
+        <Space orientation="vertical" size={12} style={{ display: 'flex' }}>
           <Space wrap>
             <DatePicker picker="month" defaultValue={dayjs()} />
             <Upload {...uploadProps}>

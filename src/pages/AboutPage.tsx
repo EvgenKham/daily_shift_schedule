@@ -2,7 +2,7 @@ import { Card, Descriptions, Space, Typography } from 'antd'
 
 export function AboutPage() {
   return (
-    <Space direction="vertical" size={16} style={{ display: 'flex' }}>
+    <Space orientation="vertical" size={16} style={{ display: 'flex' }}>
       <Card title="О нас">
         <Typography.Paragraph>
           Daily Shift Schedule — локальное офлайн‑приложение для подготовки нарядов (день/ночь) на основе месячного

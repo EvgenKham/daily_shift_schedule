@@ -2,7 +2,7 @@ import { Card, Space, Typography } from 'antd'
 
 export function HelpPage() {
   return (
-    <Space direction="vertical" size={16} style={{ display: 'flex' }}>
+    <Space orientation="vertical" size={16} style={{ display: 'flex' }}>
       <Card title="Помощь">
         <Typography.Paragraph>
           Это приложение помогает сформировать «наряд» по ежедневным сменам на основе загруженного графика месяца.
