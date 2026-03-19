@@ -2,13 +2,39 @@ import { Button, Card, Form, Input, InputNumber, Select, Space, Typography, mess
 import { useEffect } from 'react'
 import { loadJson, saveJson } from '../shared/storage/localStorageJson'
 
-type BrigadeType = '24h' | 'day' | 'night'
+type BrigadeType = 'bit' | 'pediatric' | 'linear' | 'transport'
+
+type StartTime = '7:00' | '7:30' | '8:00' | '8:30' | '9:00'
+
+const START_TIMES: StartTime[] = ['7:00', '7:30', '8:00', '8:30', '9:00']
+
+const BRIGADE_TYPE_COLORS: Record<BrigadeType, string> = {
+  bit: '#FF9900',
+  pediatric: '#CCCC33',
+  linear: '#99FF99',
+  transport: '#66CCFF',
+}
+
+function formatStartTimeLabel(t: StartTime) {
+  const [h, m] = t.split(':')
+  return `${h.padStart(2, '0')}:${m}`
+}
+
+function normalizeBrigadeType(raw: unknown): BrigadeType {
+  if (raw === 'bit' || raw === 'pediatric' || raw === 'linear' || raw === 'transport') return raw
+  // Backward compatibility for older saved settings.
+  if (raw === '24h' || raw === 'day' || raw === 'night') return 'bit'
+  return 'bit'
+}
+
+function normalizeStartTime(raw: unknown): StartTime {
+  return START_TIMES.includes(raw as StartTime) ? (raw as StartTime) : '8:00'
+}
 
 type BrigadeSettings = {
-  id: string
   number: string
   type: BrigadeType
-  startTime: '7:00' | '7:30' | '8:00' | '8:30' | '9:00'
+  startTime: StartTime
 }
 
 type Settings = {
@@ -33,9 +59,33 @@ export function SettingsPage() {
   const [form] = Form.useForm<Settings>()
   const [msg, contextHolder] = message.useMessage()
 
+  const brigadesValue = Form.useWatch('brigades', form) as BrigadeSettings[] | undefined
+
   useEffect(() => {
-    const stored = loadJson<Settings>(STORAGE_KEY)
-    form.setFieldsValue(stored ?? defaultSettings)
+    const stored = loadJson<unknown>(STORAGE_KEY) as
+      | (Settings & { brigades?: Array<unknown> })
+      | null
+
+    const brigades = Array.isArray(stored?.brigades)
+      ? stored.brigades.map((b: any) => ({
+          number: String(b?.number ?? ''),
+          type: normalizeBrigadeType(b?.type),
+          startTime: normalizeStartTime(b?.startTime),
+        }))
+      : []
+
+    form.setFieldsValue(
+      stored
+        ? {
+            userName: String(stored.userName ?? ''),
+            substationNumber:
+              typeof stored.substationNumber === 'number' ? stored.substationNumber : (null as number | null),
+            chiefParamedicName: String(stored.chiefParamedicName ?? ''),
+            headOfSubstationName: String(stored.headOfSubstationName ?? ''),
+            brigades,
+          }
+        : defaultSettings,
+    )
   }, [form])
 
   return (
@@ -55,96 +105,116 @@ export function SettingsPage() {
             }}
           >
             <Space direction="vertical" size={8} style={{ display: 'flex' }}>
-              <Form.Item label="ФИО пользователя" name="userName">
-                <Input placeholder="Например: Иванов И.И." />
+              <Form.Item label="Имя пользователя" name="userName">
+                <Input placeholder="Евгений" />
               </Form.Item>
 
               <Form.Item label="Номер подстанции" name="substationNumber">
-                <InputNumber style={{ width: '100%' }} min={1} placeholder="Например: 12" />
+                <InputNumber style={{ width: '100%' }} min={1} placeholder="Например: 11" />
               </Form.Item>
 
               <Form.Item label="ФИО старшего фельдшера" name="chiefParamedicName">
-                <Input placeholder="Например: Петров П.П." />
+                <Input placeholder="Лазарь Д.Г." />
               </Form.Item>
 
               <Form.Item label="ФИО заведующего подстанцией" name="headOfSubstationName">
-                <Input placeholder="Например: Сидоров С.С." />
+                <Input placeholder="Юдаков Е.Ю.." />
               </Form.Item>
             </Space>
 
             <Card size="small" title="Бригады" style={{ marginTop: 8 }}>
               <Form.List name="brigades">
                 {(fields, { add, remove }) => (
-                  <Space direction="vertical" size={12} style={{ display: 'flex' }}>
-                    {fields.map((field) => (
-                      <Card
-                        key={field.key}
-                        size="small"
-                        title={`Бригада #${field.name + 1}`}
-                        extra={
-                          <Button danger onClick={() => remove(field.name)}>
-                            Удалить
-                          </Button>
-                        }
-                      >
-                        <Space direction="vertical" size={8} style={{ display: 'flex' }}>
-                          <Form.Item
-                            {...field}
-                            label="ID"
-                            name={[field.name, 'id']}
-                            rules={[{ required: true, message: 'Укажите ID' }]}
-                          >
-                            <Input placeholder="Например: brig-01" />
-                          </Form.Item>
-                          <Form.Item
-                            {...field}
-                            label="Номер"
-                            name={[field.name, 'number']}
-                            rules={[{ required: true, message: 'Укажите номер' }]}
-                          >
-                            <Input placeholder="Например: 103" />
-                          </Form.Item>
-                          <Form.Item
-                            {...field}
-                            label="Тип"
-                            name={[field.name, 'type']}
-                            rules={[{ required: true, message: 'Выберите тип' }]}
-                          >
-                            <Select
-                              options={[
-                                { value: '24h', label: 'Суточная' },
-                                { value: 'day', label: 'Дневная' },
-                                { value: 'night', label: 'Ночная' },
-                              ]}
-                            />
-                          </Form.Item>
-                          <Form.Item
-                            {...field}
-                            label="Время старта"
-                            name={[field.name, 'startTime']}
-                            rules={[{ required: true, message: 'Выберите время' }]}
-                          >
-                            <Select
-                              options={[
-                                { value: '7:00', label: '07:00' },
-                                { value: '7:30', label: '07:30' },
-                                { value: '8:00', label: '08:00' },
-                                { value: '8:30', label: '08:30' },
-                                { value: '9:00', label: '09:00' },
-                              ]}
-                            />
-                          </Form.Item>
-                        </Space>
-                      </Card>
-                    ))}
+                  <>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+                        gap: 12,
+                        alignItems: 'start',
+                      }}
+                    >
+                      {fields.map((field) => (
+                        (() => {
+                          const brigadeType = brigadesValue?.[field.name]?.type
+                          const color = brigadeType ? BRIGADE_TYPE_COLORS[brigadeType] : undefined
 
-                    <Space wrap>
+                          return (
+                        <Card
+                          key={field.key}
+                          size="small"
+                          title={
+                            <span style={{ color: color ? '#1f1f1f' : undefined, fontWeight: 600 }}>
+                              Бригада #{field.name + 1}
+                            </span>
+                          }
+                          extra={
+                            <Button danger size="small" onClick={() => remove(field.name)}>
+                              Удалить
+                            </Button>
+                          }
+                          style={{
+                            width: '100%',
+                            borderStyle: 'solid',
+                            borderWidth: 1,
+                            borderColor: color ?? '#d9d9d9',
+                            boxShadow: 'none',
+                          }}
+                          headStyle={{
+                            backgroundColor: color,
+                            borderColor: color ?? '#d9d9d9',
+                          }}
+                          bodyStyle={{ backgroundColor: '#fff' }}
+                        >
+                          <Space direction="vertical" size={6} style={{ display: 'flex' }}>
+                            <Form.Item
+                              {...field}
+                              label="Номер"
+                              name={[field.name, 'number']}
+                              rules={[{ required: true, message: 'Укажите номер' }]}
+                            >
+                              <Input placeholder="Например: 1151" />
+                            </Form.Item>
+
+                            <Form.Item
+                              {...field}
+                              label="Тип"
+                              name={[field.name, 'type']}
+                              rules={[{ required: true, message: 'Выберите тип' }]}
+                            >
+                              <Select
+                                options={[
+                                  { value: 'bit', label: 'БИТ' },
+                                  { value: 'pediatric', label: 'Педиатрическая' },
+                                  { value: 'linear', label: 'Линейная' },
+                                  { value: 'transport', label: 'Перевозка' },
+                                ]}
+                              />
+                            </Form.Item>
+
+                            <Form.Item
+                              {...field}
+                              label="Время старта"
+                              name={[field.name, 'startTime']}
+                              rules={[{ required: true, message: 'Выберите время' }]}
+                            >
+                              <Select
+                                options={START_TIMES.map((t) => ({ value: t, label: formatStartTimeLabel(t) }))}
+                              />
+                            </Form.Item>
+                          </Space>
+                        </Card>
+                          )
+                        })()
+                      ))}
+                    </div>
+
+                    <Space wrap style={{ marginTop: 12 }}>
                       <Button
                         onClick={() =>
                           add({
-                            id: '',
                             number: '',
-                            type: 'day' as const,
+                            type: 'bit' as const,
                             startTime: '8:00' as const,
                           })
                         }
@@ -152,7 +222,7 @@ export function SettingsPage() {
                         Добавить бригаду
                       </Button>
                     </Space>
-                  </Space>
+                  </>
                 )}
               </Form.List>
             </Card>
