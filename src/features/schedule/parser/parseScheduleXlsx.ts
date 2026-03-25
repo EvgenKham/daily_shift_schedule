@@ -230,6 +230,11 @@ function parseWorksheet(sheetName: string, worksheet: XLSX.WorkSheet): ParseWork
       continue
     }
 
+    // Skip "сестра-хозяйка" as it's not needed for shift order generation
+    if (roleLabel.toLowerCase().includes('сестра-хозяйка')) {
+      continue
+    }
+
     if (!roleLabel) {
       issues.push({
         severity: 'warning',
@@ -268,6 +273,7 @@ function parseWorksheet(sheetName: string, worksheet: XLSX.WorkSheet): ParseWork
         colIndex,
         dayNumber,
         rawShift,
+        roleLabel,
       }).map((it) => ({
         ...it,
         message: `Лист "${sheetName}": ${it.message}`,

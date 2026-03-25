@@ -5,6 +5,23 @@ type ShiftValidationContext = {
   colIndex?: number
   dayNumber?: number
   rawShift: string
+  roleLabel?: string
+}
+
+const CLEANING_ROLES = ['уборщ. служ. помещ.', 'уборщик территории']
+
+const ALLOWED_DURATIONS_FOR_CLEANING = [24 * 60, 10.5 * 60, 8.5 * 60]
+
+function isCleaningRole(roleLabel: string | undefined): boolean {
+  if (!roleLabel) return false
+  const normalized = roleLabel.toLowerCase().trim()
+  return CLEANING_ROLES.some((r) => normalized.includes(r.toLowerCase()))
+}
+
+function isAllowedCleaningDuration(durationMinutes: number): boolean {
+  return ALLOWED_DURATIONS_FOR_CLEANING.some(
+    (d) => Math.abs(durationMinutes - d) < 1,
+  )
 }
 
 function issue(base: {
@@ -32,21 +49,30 @@ export function validateParsedShift(shift: ParsedShift, ctx: ShiftValidationCont
   const startHour = shift.startHM.hours
   const endHour = shift.endHM.hours
 
+  const isCleaning = isCleaningRole(ctx.roleLabel)
+  const isCleaningDurationAllowed = isAllowedCleaningDuration(shift.durationMinutes)
+
   // Keep validation intentionally "soft" (warnings), because Excel sources can vary.
   if (shift.kind === 'day') {
     const expectedEndHour = startHour + 12
-    if (shift.durationMinutes !== 12 * 60) {
-      issues.push(
-        issue({
-          severity: 'warning',
-          code: 'DAY_SHIFT_DURATION_NOT_12H',
-          message: `Нестандартная длительность дневной смены (${shift.durationMinutes / 60}ч), ожидалось 12ч`,
-          ...ctx,
-          rawShift: ctx.rawShift,
-        }),
-      )
+    
+    // Skip duration check for cleaning roles with allowed durations
+    if (!isCleaning || !isCleaningDurationAllowed) {
+      if (shift.durationMinutes !== 12 * 60) {
+        issues.push(
+          issue({
+            severity: 'warning',
+            code: 'DAY_SHIFT_DURATION_NOT_12H',
+            message: `Нестандартная длительность дневной смены (${shift.durationMinutes / 60}ч), ожидалось 12ч`,
+            ...ctx,
+            rawShift: ctx.rawShift,
+          }),
+        )
+      }
     }
-    if (endHour !== expectedEndHour) {
+    
+    // Skip end time check for cleaning roles
+    if (!isCleaning && endHour !== expectedEndHour) {
       issues.push(
         issue({
           severity: 'warning',
@@ -59,17 +85,22 @@ export function validateParsedShift(shift: ParsedShift, ctx: ShiftValidationCont
     }
   } else if (shift.kind === 'night') {
     const expectedEndHour = startHour - 12
-    if (shift.durationMinutes !== 12 * 60) {
-      issues.push(
-        issue({
-          severity: 'warning',
-          code: 'NIGHT_SHIFT_DURATION_NOT_12H',
-          message: `Нестандартная длительность ночной смены (${shift.durationMinutes / 60}ч), ожидалось 12ч`,
-          ...ctx,
-          rawShift: ctx.rawShift,
-        }),
-      )
+    
+    // Skip duration check for cleaning roles with allowed durations
+    if (!isCleaning || !isCleaningDurationAllowed) {
+      if (shift.durationMinutes !== 12 * 60) {
+        issues.push(
+          issue({
+            severity: 'warning',
+            code: 'NIGHT_SHIFT_DURATION_NOT_12H',
+            message: `Нестандартная длительность ночной смены (${shift.durationMinutes / 60}ч), ожидалось 12ч`,
+            ...ctx,
+            rawShift: ctx.rawShift,
+          }),
+        )
+      }
     }
+    
     if (endHour !== expectedEndHour) {
       issues.push(
         issue({
@@ -83,17 +114,21 @@ export function validateParsedShift(shift: ParsedShift, ctx: ShiftValidationCont
     }
   } else {
     // 24h-type
-    if (shift.durationMinutes !== 24 * 60) {
-      issues.push(
-        issue({
-          severity: 'warning',
-          code: '24H_SHIFT_DURATION_NOT_24H',
-          message: `Смена помечена как суточная, но длительность не 24ч (${shift.durationMinutes / 60}ч)`,
-          ...ctx,
-          rawShift: ctx.rawShift,
-        }),
-      )
+    // Skip duration check for cleaning roles with allowed durations
+    if (!isCleaning || !isCleaningDurationAllowed) {
+      if (shift.durationMinutes !== 24 * 60) {
+        issues.push(
+          issue({
+            severity: 'warning',
+            code: '24H_SHIFT_DURATION_NOT_24H',
+            message: `Смена помечена как суточная, но длительность не 24ч (${shift.durationMinutes / 60}ч)`,
+            ...ctx,
+            rawShift: ctx.rawShift,
+          }),
+        )
+      }
     }
+    
     if (endHour !== startHour && endHour !== startHour - 1) {
       issues.push(
         issue({
@@ -107,7 +142,8 @@ export function validateParsedShift(shift: ParsedShift, ctx: ShiftValidationCont
     }
   }
 
-  if (shift.appendUntilText) {
+  // Skip append-until check for cleaning roles
+  if (shift.appendUntilText && !isCleaning) {
     issues.push(
       issue({
         severity: 'warning',
@@ -147,13 +183,6 @@ export function validateScheduleNormalized(normalized: ScheduleNormalized): Sche
         severity: 'error',
         code: 'EMPTY_FIO',
         message: 'Обнаружена строка сотрудника без ФИО.',
-      })
-    }
-    if (!e.roleLabel.trim()) {
-      issues.push({
-        severity: 'warning',
-        code: 'MISSING_ROLE',
-        message: `Для сотрудника "${e.fullName}" не указана должность.`,
       })
     }
   }

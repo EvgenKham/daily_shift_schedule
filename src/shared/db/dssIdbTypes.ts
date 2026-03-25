@@ -1,4 +1,5 @@
 import type { DBSchema } from 'idb'
+import type { ScheduleValidationIssue } from '../../features/schedule/parser/types'
 
 export type BrigadeType = 'bit' | 'pediatric' | 'linear' | 'transport'
 export type StartTime = '7:00' | '7:30' | '8:00' | '8:30' | '9:00'
@@ -44,6 +45,11 @@ export type ScheduleDoc = {
    */
   raw: unknown
   normalized: unknown
+
+  /**
+   * Validation issues from parsing the schedule.
+   */
+  validationIssues?: ScheduleValidationIssue[]
 }
 
 export type RosterDoc = {
