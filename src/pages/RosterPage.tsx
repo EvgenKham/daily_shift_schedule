@@ -25,9 +25,9 @@ export function RosterPage() {
   const data: Row[] = []
 
   return (
-    <Space direction="vertical" size={16} style={{ display: 'flex' }}>
+    <Space orientation="vertical" size={16} style={{ display: 'flex' }}>
       <Card title="Наряд (день/ночь)">
-        <Space direction="vertical" size={12} style={{ display: 'flex' }}>
+        <Space orientation="vertical" size={12} style={{ display: 'flex' }}>
           <Space wrap>
             <DatePicker defaultValue={dayjs()} />
             <Button type="primary" disabled>

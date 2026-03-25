@@ -67,11 +67,14 @@ export function SettingsPage() {
       | null
 
     const brigades = Array.isArray(stored?.brigades)
-      ? stored.brigades.map((b: any) => ({
-          number: String(b?.number ?? ''),
-          type: normalizeBrigadeType(b?.type),
-          startTime: normalizeStartTime(b?.startTime),
-        }))
+      ? stored.brigades.map((b: unknown) => {
+          const maybe = b as { number?: unknown; type?: unknown; startTime?: unknown } | null
+          return {
+            number: String(maybe?.number ?? ''),
+            type: normalizeBrigadeType(maybe?.type),
+            startTime: normalizeStartTime(maybe?.startTime),
+          }
+        })
       : []
 
     form.setFieldsValue(
@@ -91,7 +94,7 @@ export function SettingsPage() {
   return (
     <>
       {contextHolder}
-      <Space direction="vertical" size={16} style={{ display: 'flex' }}>
+      <Space orientation="vertical" size={16} style={{ display: 'flex' }}>
         <Card
           title="Настройки"
           extra={<Typography.Text type="secondary">Сохраняется локально (localStorage)</Typography.Text>}
@@ -104,7 +107,7 @@ export function SettingsPage() {
               void msg.success('Настройки сохранены')
             }}
           >
-            <Space direction="vertical" size={8} style={{ display: 'flex' }}>
+            <Space orientation="vertical" size={8} style={{ display: 'flex' }}>
               <Form.Item label="Имя пользователя" name="userName">
                 <Input placeholder="Евгений" />
               </Form.Item>
@@ -166,9 +169,8 @@ export function SettingsPage() {
                           }}
                           bodyStyle={{ backgroundColor: '#fff' }}
                         >
-                          <Space direction="vertical" size={6} style={{ display: 'flex' }}>
+                          <Space orientation="vertical" size={6} style={{ display: 'flex' }}>
                             <Form.Item
-                              {...field}
                               label="Номер"
                               name={[field.name, 'number']}
                               rules={[{ required: true, message: 'Укажите номер' }]}
@@ -177,7 +179,6 @@ export function SettingsPage() {
                             </Form.Item>
 
                             <Form.Item
-                              {...field}
                               label="Тип"
                               name={[field.name, 'type']}
                               rules={[{ required: true, message: 'Выберите тип' }]}
@@ -193,7 +194,6 @@ export function SettingsPage() {
                             </Form.Item>
 
                             <Form.Item
-                              {...field}
                               label="Время старта"
                               name={[field.name, 'startTime']}
                               rules={[{ required: true, message: 'Выберите время' }]}
