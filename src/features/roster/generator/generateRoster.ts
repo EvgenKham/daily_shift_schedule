@@ -10,6 +10,140 @@ import type {
 } from '../types'
 
 /**
+ * Типы сотрудников согласно алгоритму
+ */
+type EmployeeType =
+  | 'doctor' // Врач выездной бригады
+  | 'doctor_pediatric' // Врач педиатр
+  | 'doctor_psychiatrist' // Врач психиатр
+  | 'paramedic_independent' // Фельдшер выезжающий самостоятельно
+  | 'paramedic' // Фельдшер выездной бригады
+  | 'dispatcher' // Диспетчер
+  | 'paramedic_fill_block' // Фельдшер заправочного блока
+  | 'cleaner_office' // Уборщик служебных помещений
+  | 'cleaner_territory' // Уборщик территорий
+  | 'sanitar' // Санитар выездной бригады
+  | 'other' // Остальные
+
+/**
+ * Требования к бригадам по составу
+ * Минимальный состав для каждой бригады
+ */
+const BRIGADE_REQUIREMENTS: Record<BrigadeType, {
+  doctors: number
+  paramedics: number
+  paramedicsIndependent: number
+  sanitars: number
+}> = {
+  bit: { doctors: 1, paramedics: 2, paramedicsIndependent: 0, sanitars: 1 },
+  pediatric: { doctors: 1, paramedics: 1, paramedicsIndependent: 0, sanitars: 0 },
+  linear: { doctors: 0, paramedics: 1, paramedicsIndependent: 1, sanitars: 0 },
+  transport: { doctors: 0, paramedics: 1, paramedicsIndependent: 0, sanitars: 0 },
+}
+
+/**
+ * Расширенное распределение сотрудников по бригадам
+ * Согласно требованиям:
+ * - Врач выездной бригады может быть только в БИТ
+ * - Врач педиатр – только в педиатрической бригаде
+ * - Фельдшер выезжающий самостоятельно – только в линейной бригаде
+ * - Фельдшер выездной бригады может и должен быть в составе любой бригады
+ * - Санитар может быть в любой бригаде, но не может быть один
+ * - Санитар в приоритете на врачебной бригаде (БИТ, педиатрическая)
+ * - Не более одного санитара на бригаду
+ * - В одной бригаде не может быть 2 фельдшера выезжающих самостоятельно
+ * - В одной бригаде не может быть только фельдшер выездной бригады и только санитар
+ *   (требуется старший: врач, педиатр или фельдшер выезжающий самостоятельно)
+ *
+ * @param employees - Сотрудники для распределения
+ * @param brigadeType - Тип бригады
+ * @param _brigadeNumber - Номер бригады (не используется)
+ * @param isNightShift - Ночная ли смена (резерв для будущей логики)
+ */
+function assignEmployeesToBrigadeAdvanced(
+  employees: (Employee & { type: EmployeeType })[],
+  brigadeType: BrigadeType,
+  _brigadeNumber: string,
+): (Employee & { type: EmployeeType })[] {
+  const requirements = BRIGADE_REQUIREMENTS[brigadeType]
+  const assigned: (Employee & { type: EmployeeType })[] = []
+
+  // Создаём копии массивов для каждого типа сотрудников
+  const available = {
+    doctors: employees.filter(e => e.type === 'doctor'),
+    doctorsPediatric: employees.filter(e => e.type === 'doctor_pediatric'),
+    paramedicsIndependent: employees.filter(e => e.type === 'paramedic_independent'),
+    paramedics: employees.filter(e => e.type === 'paramedic'),
+    sanitars: employees.filter(e => e.type === 'sanitar'),
+  }
+
+  // 1. Распределяем врачей согласно типу бригады
+  if (brigadeType === 'bit' && requirements.doctors > 0) {
+    const doctorsNeeded = requirements.doctors
+    for (let i = 0; i < Math.min(doctorsNeeded, available.doctors.length); i++) {
+      assigned.push(available.doctors[i])
+    }
+  }
+
+  if (brigadeType === 'pediatric' && requirements.doctors > 0) {
+    const doctorsNeeded = requirements.doctors
+    for (let i = 0; i < Math.min(doctorsNeeded, available.doctorsPediatric.length); i++) {
+      assigned.push(available.doctorsPediatric[i])
+    }
+  }
+
+  // 2. Распределяем фельдшеров выезжающих самостоятельно (только для линейных)
+  // ВАЖНО: не более 1 фельдшера выезжающего самостоятельно на бригаду
+  if (brigadeType === 'linear' && requirements.paramedicsIndependent > 0) {
+    const independentNeeded = Math.min(1, requirements.paramedicsIndependent) // Максимум 1
+    for (let i = 0; i < Math.min(independentNeeded, available.paramedicsIndependent.length); i++) {
+      assigned.push(available.paramedicsIndependent[i])
+    }
+  }
+
+  // 3. Распределяем фельдшеров выездных бригад
+  // Фельдшер выездной бригады может и должен быть в любой бригаде
+  if (requirements.paramedics > 0) {
+    const paramedicsNeeded = requirements.paramedics
+    const stillNeeded = paramedicsNeeded - assigned.filter(e => e.type === 'paramedic').length
+
+    for (let i = 0; i < Math.min(stillNeeded, available.paramedics.length); i++) {
+      if (!assigned.includes(available.paramedics[i])) {
+        assigned.push(available.paramedics[i])
+      }
+    }
+  }
+
+  // 4. Распределяем санитаров с проверками
+  // - Санитар не может быть один (нужен врач или фельдшер выезжающий самостоятельно)
+  // - Не более 1 санитара на бригаду
+  // - В приоритете на врачебной бригаде (БИТ, педиатрическая)
+  // - В бригаде не может быть ТОЛЬКО фельдшер выездной бригады и санитар (нужен старший)
+  // Это требование действует и для дневной, и для ночной смены
+  const hasSeniorStaff = assigned.some(e =>
+    e.type === 'doctor' ||
+    e.type === 'doctor_pediatric' ||
+    e.type === 'paramedic_independent'
+  )
+
+  if (requirements.sanitars > 0 && hasSeniorStaff && available.sanitars.length > 0) {
+    // Проверка: в бригаде не может быть ТОЛЬКО фельдшер выездной бригады и санитар
+    // Нужен хотя бы один старший сотрудник (врач, педиатр, фельдшер выезжающий самостоятельно)
+    const hasOnlyParamedic = assigned.some(e => e.type === 'paramedic') &&
+      !assigned.some(e => e.type === 'doctor' || e.type === 'doctor_pediatric' || e.type === 'paramedic_independent')
+
+    if (!hasOnlyParamedic) {
+      // Добавляем только одного санитара
+      assigned.push(available.sanitars[0])
+    }
+    // Если есть только фельдшер выездной бригады и нет старшего - санитара не добавляем
+    // Это требование действует и для дневной, и для ночной смены
+  }
+
+  return assigned
+}
+
+/**
  * Generate roster data for a specific date from schedule + brigades settings.
  */
 export function generateRoster(
@@ -29,27 +163,112 @@ export function generateRoster(
         fullName: emp.fullName,
         roleLabel: emp.roleLabel,
         shift: shiftCell.parsed,
-      } as Employee
+        type: classifyEmployee(emp.roleLabel),
+      } as Employee & { type: EmployeeType }
     })
-    .filter((e): e is Employee => e !== null)
+    .filter((e): e is Employee & { type: EmployeeType } => e !== null)
 
-  // Separate by shift type (day/night)
-  const dayEmployees = employeesOnDay.filter(
-    (e) => e.shift && (e.shift.kind === 'day' || e.shift.kind === '24h'),
-  )
-  const nightEmployees = employeesOnDay.filter(
-    (e) => e.shift && (e.shift.kind === 'night' || e.shift.kind === '24h'),
-  )
+  // Debug: count employees by type
+  const typeCounts: Record<EmployeeType, number> = {
+    doctor: 0,
+    doctor_pediatric: 0,
+    doctor_psychiatrist: 0,
+    paramedic_independent: 0,
+    paramedic: 0,
+    sanitar: 0,
+    dispatcher: 0,
+    paramedic_fill_block: 0,
+    cleaner_office: 0,
+    cleaner_territory: 0,
+    other: 0,
+  }
+  employeesOnDay.forEach(e => typeCounts[e.type]++)
 
-  // Generate brigade rows
+  // Add debug warning if no paramedics found
+  if (typeCounts.paramedic === 0 && typeCounts.doctor === 0 && typeCounts.doctor_pediatric === 0) {
+    warnings.push({
+      code: 'NO_MEDICAL_STAFF',
+      message: `Найдено сотрудников: врачей=${typeCounts.doctor}, педиатров=${typeCounts.doctor_pediatric}, фельдшеров=${typeCounts.paramedic}. Проверьте график и классификацию должностей.`,
+      severity: 'warning',
+    })
+  }
+
+  // Распределяем сотрудников по сменам на основе времени НАЧАЛА смены:
+  // - Day сотрудники (start: 7:00, 7:30, 8:00, 9:00) → в dayEmployees
+  // - Night сотрудники (start: 19:00, 19:30, 20:00, 21:00) → в nightEmployees
+  // Суточные (duration > 12h) попадают в тот список, который соответствует времени начала их смены
+  const DAY_START_TIMES = ['7:00', '7:30', '8:00', '9:00']
+  const NIGHT_START_TIMES = ['19:00', '19:30', '20:00', '21:00']
+
+  let dayEmployees = employeesOnDay.filter((e) => {
+    if (!e.shift) return false
+    return DAY_START_TIMES.includes(e.shift.start)
+  })
+
+  let nightEmployees = employeesOnDay.filter((e) => {
+    if (!e.shift) return false
+    return NIGHT_START_TIMES.includes(e.shift.start)
+  })
+
+  // Generate brigade rows with proper employee assignment
   const brigadeRows: BrigadeRow[] = []
+
+  // Распределяем сотрудников по порядку приоритета:
+  // 1. Врачи
+  // 2. Педиатры
+  // 3. Фельдшеры выезжающие самостоятельно
+  // 4. Фельдшеры выездных бригад
+  // 5. Санитары
+  // 6. Остальные
 
   for (const brigade of brigades) {
     const shiftDay = formatShiftDay(brigade.startTime)
     const shiftNight = formatShiftNight(brigade.startTime)
 
-    const employeesAssignedDay = assignEmployeesToBrigade(dayEmployees, brigade.type)
-    const employeesAssignedNight = assignEmployeesToBrigade(nightEmployees, brigade.type)
+    // Фильтруем дневных сотрудников по времени начала смены
+    const dayEmployeesForBrigade = dayEmployees.filter((e) => {
+      if (!e.shift) return false
+      return e.shift.start === brigade.startTime
+    })
+
+    // Ночные сотрудники фильтруются по времени начала ночной смены
+    // Для бригады со стартом 8:00 ночная смена начинается в 20:00
+    const nightStartTime = calculateNightStartTime(brigade.startTime)
+    const nightEmployeesForBrigade = nightEmployees.filter((e) => {
+      if (!e.shift) return false
+      return e.shift.start === nightStartTime
+    })
+
+    const assignedDay = assignEmployeesToBrigadeAdvanced(
+      dayEmployeesForBrigade,
+      brigade.type,
+      brigade.number,
+    )
+
+    // Для ночной смены:
+    // 1. Берём сотрудников из nightEmployeesForBrigade
+    // 2. Добавляем суточных сотрудников из assignedDay (кто работает > 12h)
+    const assignedNightBase = assignEmployeesToBrigadeAdvanced(
+      nightEmployeesForBrigade,
+      brigade.type,
+      brigade.number,
+    )
+
+    // Добавляем суточных сотрудников из дневной смены
+    const employees24h = assignedDay.filter(e => e.shift && e.shift.durationMinutes > 12 * 60)
+    const assignedNight = [...assignedNightBase, ...employees24h]
+
+    // Удаляем распределённых сотрудников из пула
+    // Суточные сотрудники удаляются и из day, и из night пулов
+    const assignedDayKeys = new Set(
+      assignedDay.map(e => e.fullName)
+    )
+    const assignedNightKeys = new Set(
+      assignedNight.map(e => e.fullName)
+    )
+
+    dayEmployees = dayEmployees.filter(e => !assignedDayKeys.has(e.fullName))
+    nightEmployees = nightEmployees.filter(e => !assignedNightKeys.has(e.fullName))
 
     brigadeRows.push({
       key: `brigade-${brigade.number}`,
@@ -57,8 +276,8 @@ export function generateRoster(
       brigadeType: brigade.type,
       shiftDay,
       shiftNight,
-      employeesDay: employeesAssignedDay,
-      employeesNight: employeesAssignedNight,
+      employeesDay: assignedDay,
+      employeesNight: assignedNight,
       arrivalTimeDay: formatArrivalTime(brigade.startTime),
       arrivalTimeNight: formatArrivalTimeNight(brigade.startTime),
     })
@@ -111,30 +330,88 @@ export function generateRoster(
 }
 
 /**
- * Assign employees to a brigade based on brigade type heuristics.
- * For MVP: filter by role label matching brigade type.
+ * Классификация сотрудника по роли
+ * Поддерживает полные названия и сокращения из графика
  */
-function assignEmployeesToBrigade(employees: Employee[], brigadeType: BrigadeType): Employee[] {
-  // Simple heuristic: match role label to brigade type
-  const typeKeywords: Record<BrigadeType, string[]> = {
-    bit: ['бит', 'бригада', 'врач', 'фельдшер'],
-    pediatric: ['пед', 'детский', 'педиатр'],
-    linear: ['лин', 'линейн'],
-    transport: ['перев', 'транспорт'],
+function classifyEmployee(roleLabel: string): EmployeeType {
+  const role = roleLabel.toLowerCase()
+
+  // Врач педиатр - только в педиатрической бригаде
+  if (role.includes('педиатр') || role.includes('детский')) {
+    return 'doctor_pediatric'
   }
 
-  const keywords = typeKeywords[brigadeType]
+  // Врач психиатр - только в психиатрической бригаде
+  if (role.includes('психиатр')) {
+    return 'doctor_psychiatrist'
+  }
 
-  return employees.filter((emp) => {
-    const roleLower = emp.roleLabel.toLowerCase()
-    const nameLower = emp.fullName.toLowerCase()
-    return keywords.some((kw) => roleLower.includes(kw) || nameLower.includes(kw))
-  })
+  // Фельдшер выезжающий самостоятельно - старший в линейной бригаде
+  // Сокращения: "фельд. выез. сам.", "фельд. выезж. сам."
+  if (role.includes('фельд') && role.includes('выез') && role.includes('сам')) {
+    return 'paramedic_independent'
+  }
+  // Также проверяем "старший фельдшер"
+  if (role.includes('старш') && role.includes('фельд')) {
+    return 'paramedic_independent'
+  }
+
+  // Фельдшер выездной бригады
+  // Сокращения: "фельд. выез. бр.", "фельд. выезд. бр."
+  if (role.includes('фельд') && role.includes('выез') && role.includes('бр')) {
+    return 'paramedic'
+  }
+
+  // Врач выездной бригады (проверяем после фельдшеров, чтобы не захватить их)
+  // Сокращения: "врач выезд. бр.", "врач выездной"
+  if (role.includes('врач') && role.includes('выез')) {
+    return 'doctor'
+  }
+  if (role.includes('врач') && !role.includes('педиатр') && !role.includes('психиатр')) {
+    return 'doctor'
+  }
+
+  // Санитар выездной бригады
+  // Сокращения: "сан. выезд. бр.", "санитар выезд."
+  if (role.includes('сан')) {
+    return 'sanitar'
+  }
+
+  // Диспетчер
+  if (role.includes('диспетчер')) {
+    return 'dispatcher'
+  }
+
+  // Фельдшер заправочного блока
+  if (role.includes('фельд') && (role.includes('заправ') || role.includes('топлив'))) {
+    return 'paramedic_fill_block'
+  }
+
+  // Уборщик служебных помещений
+  if (role.includes('уборщ') && role.includes('помещ')) {
+    return 'cleaner_office'
+  }
+
+  // Уборщик территорий
+  if (role.includes('уборщ') && role.includes('террит')) {
+    return 'cleaner_territory'
+  }
+
+  return 'other'
+}
+
+/**
+ * Расчёт времени начала ночной смены на основе времени старта бригады
+ * Например: 8:00 → 20:00, 9:00 → 21:00, 7:30 → 19:30
+ */
+function calculateNightStartTime(dayStartTime: string): string {
+  const [hours, minutes] = dayStartTime.split(':').map(Number)
+  const nightHours = hours + 12
+  return `${String(nightHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
 /**
  * Generate support services from employees.
- * For MVP: extract based on role keywords.
  */
 function generateSupportServices(employees: Employee[]): SupportService[] {
   const services: SupportService[] = []
