@@ -27,7 +27,7 @@ type EmployeeType =
 
 /**
  * Требования к бригадам по составу
- * Минимальный состав для каждой бригады
+ * Полный состав для каждой бригады
  */
 const BRIGADE_REQUIREMENTS: Record<BrigadeType, {
   doctors: number
@@ -39,6 +39,44 @@ const BRIGADE_REQUIREMENTS: Record<BrigadeType, {
   pediatric: { doctors: 1, paramedics: 1, paramedicsIndependent: 0, sanitars: 0 },
   linear: { doctors: 0, paramedics: 1, paramedicsIndependent: 1, sanitars: 0 },
   transport: { doctors: 0, paramedics: 1, paramedicsIndependent: 0, sanitars: 0 },
+}
+
+/**
+ * Приоритеты сортировки сотрудников для разных типов бригад
+ * - Во врачебных бригадах (БИТ, педиатрическая): врач → фельдшер → санитар
+ * - В линейных бригадах: фельдшер выезжающий самостоятельно → фельдшер → санитар
+ */
+function getEmployeePriority(brigadeType: BrigadeType): Record<EmployeeType, number> {
+  if (brigadeType === 'linear') {
+    // Линейная бригада: фельдшер выезжающий самостоятельно → фельдшер → санитар
+    return {
+      paramedic_independent: 1,
+      paramedic: 2,
+      sanitar: 3,
+      doctor: 99,
+      doctor_pediatric: 99,
+      doctor_psychiatrist: 99,
+      dispatcher: 999,
+      paramedic_fill_block: 999,
+      cleaner_office: 999,
+      cleaner_territory: 999,
+      other: 999,
+    }
+  }
+  // Врачебные бригады (БИТ, педиатрическая) и остальные: врач → фельдшер → санитар
+  return {
+    doctor: 1,
+    doctor_pediatric: 1,
+    doctor_psychiatrist: 1,
+    paramedic_independent: 2,
+    paramedic: 2,
+    sanitar: 3,
+    dispatcher: 999,
+    paramedic_fill_block: 999,
+    cleaner_office: 999,
+    cleaner_territory: 999,
+    other: 999,
+  }
 }
 
 /**
@@ -68,13 +106,21 @@ function assignEmployeesToBrigadeAdvanced(
   const requirements = BRIGADE_REQUIREMENTS[brigadeType]
   const assigned: (Employee & { type: EmployeeType })[] = []
 
-  // Создаём копии массивов для каждого типа сотрудников
+  // Сортируем сотрудников по должности перед распределением
+  const sortedEmployees = [...employees].sort((a, b) => {
+    const priority = getEmployeePriority(brigadeType)
+    const priorityA = priority[a.type] ?? 999
+    const priorityB = priority[b.type] ?? 999
+    return priorityA - priorityB
+  })
+
+  // Создаём копии массивов для каждого типа сотрудников из отсортированного списка
   const available = {
-    doctors: employees.filter(e => e.type === 'doctor'),
-    doctorsPediatric: employees.filter(e => e.type === 'doctor_pediatric'),
-    paramedicsIndependent: employees.filter(e => e.type === 'paramedic_independent'),
-    paramedics: employees.filter(e => e.type === 'paramedic'),
-    sanitars: employees.filter(e => e.type === 'sanitar'),
+    doctors: sortedEmployees.filter(e => e.type === 'doctor'),
+    doctorsPediatric: sortedEmployees.filter(e => e.type === 'doctor_pediatric'),
+    paramedicsIndependent: sortedEmployees.filter(e => e.type === 'paramedic_independent'),
+    paramedics: sortedEmployees.filter(e => e.type === 'paramedic'),
+    sanitars: sortedEmployees.filter(e => e.type === 'sanitar'),
   }
 
   // 1. Распределяем врачей согласно типу бригады
@@ -153,6 +199,8 @@ export function generateRoster(
   const { dayNumber, brigades, settings } = options
   const warnings: RosterWarning[] = []
 
+  // console.log(schedule);
+
   // Extract employees working on this day
   const employeesOnDay = schedule.employees
     .map((emp) => {
@@ -184,14 +232,16 @@ export function generateRoster(
   }
   employeesOnDay.forEach(e => typeCounts[e.type]++)
 
+  // console.log(employeesOnDay);
+
   // Add debug warning if no paramedics found
-  if (typeCounts.paramedic === 0 && typeCounts.doctor === 0 && typeCounts.doctor_pediatric === 0) {
-    warnings.push({
-      code: 'NO_MEDICAL_STAFF',
-      message: `Найдено сотрудников: врачей=${typeCounts.doctor}, педиатров=${typeCounts.doctor_pediatric}, фельдшеров=${typeCounts.paramedic}. Проверьте график и классификацию должностей.`,
-      severity: 'warning',
-    })
-  }
+  // if (typeCounts.paramedic === 0 && typeCounts.doctor === 0 && typeCounts.doctor_pediatric === 0) {
+  //   warnings.push({
+  //     code: 'NO_MEDICAL_STAFF',
+  //     message: `Найдено сотрудников: врачей=${typeCounts.doctor}, педиатров=${typeCounts.doctor_pediatric}, фельдшеров=${typeCounts.paramedic}. Проверьте график и классификацию должностей.`,
+  //     severity: 'warning',
+  //   })
+  // }
 
   // Распределяем сотрудников по сменам на основе времени НАЧАЛА смены:
   // - Day сотрудники (start: 7:00, 7:30, 8:00, 9:00) → в dayEmployees
@@ -207,7 +257,11 @@ export function generateRoster(
 
   let nightEmployees = employeesOnDay.filter((e) => {
     if (!e.shift) return false
-    return NIGHT_START_TIMES.includes(e.shift.start)
+    // Сотрудники работающие 24 часа (суточные) попадают в обе смены
+    const is24Hour = e.shift.durationMinutes > 12 * 60
+    // Плюс сотрудники, начинающие работу в ночное время
+    const isNightStart = NIGHT_START_TIMES.includes(e.shift.start)
+    return isNightStart || is24Hour
   })
 
   // Generate brigade rows with proper employee assignment
@@ -231,11 +285,15 @@ export function generateRoster(
       return e.shift.start === brigade.startTime
     })
 
-    // Ночные сотрудники фильтруются по времени начала ночной смены
-    // Для бригады со стартом 8:00 ночная смена начинается в 20:00
+    // Ночные сотрудники для бригады (ТОЛЬКО не-суточные, начинающие в ночное время)
+    // Суточные будут добавлены отдельно из assignedDay
     const nightStartTime = calculateNightStartTime(brigade.startTime)
     const nightEmployeesForBrigade = nightEmployees.filter((e) => {
       if (!e.shift) return false
+      // Исключаем суточных — они будут добавлены из assignedDay
+      const is24Hour = e.shift.durationMinutes > 12 * 60
+      if (is24Hour) return false
+      // Только сотрудники, начинающие работу в ночное время этой бригады
       return e.shift.start === nightStartTime
     })
 
@@ -245,27 +303,20 @@ export function generateRoster(
       brigade.number,
     )
 
-    // Для ночной смены:
-    // 1. Берём сотрудников из nightEmployeesForBrigade
-    // 2. Добавляем суточных сотрудников из assignedDay (кто работает > 12h)
+    // Базовая ночная смена (не-суточные)
     const assignedNightBase = assignEmployeesToBrigadeAdvanced(
       nightEmployeesForBrigade,
       brigade.type,
       brigade.number,
     )
 
-    // Добавляем суточных сотрудников из дневной смены
+    // Добавляем суточных сотрудников из дневной смены той же бригады
     const employees24h = assignedDay.filter(e => e.shift && e.shift.durationMinutes > 12 * 60)
     const assignedNight = [...assignedNightBase, ...employees24h]
 
     // Удаляем распределённых сотрудников из пула
-    // Суточные сотрудники удаляются и из day, и из night пулов
-    const assignedDayKeys = new Set(
-      assignedDay.map(e => e.fullName)
-    )
-    const assignedNightKeys = new Set(
-      assignedNight.map(e => e.fullName)
-    )
+    const assignedDayKeys = new Set(assignedDay.map(e => e.fullName))
+    const assignedNightKeys = new Set(assignedNight.map(e => e.fullName))
 
     dayEmployees = dayEmployees.filter(e => !assignedDayKeys.has(e.fullName))
     nightEmployees = nightEmployees.filter(e => !assignedNightKeys.has(e.fullName))
@@ -383,7 +434,7 @@ function classifyEmployee(roleLabel: string): EmployeeType {
   }
 
   // Фельдшер заправочного блока
-  if (role.includes('фельд') && (role.includes('заправ') || role.includes('топлив'))) {
+  if (role.includes('фельд') && (role.includes('заправ') && role.includes('блок'))) {
     return 'paramedic_fill_block'
   }
 
