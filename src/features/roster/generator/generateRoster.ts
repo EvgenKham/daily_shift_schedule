@@ -96,15 +96,25 @@ function getEmployeePriority(brigadeType: BrigadeType): Record<EmployeeType, num
  * @param employees - Сотрудники для распределения
  * @param brigadeType - Тип бригады
  * @param _brigadeNumber - Номер бригады (не используется)
- * @param isNightShift - Ночная ли смена (резерв для будущей логики)
+ * @param alreadyAssigned - Уже назначенные сотрудники (например, суточные из дневной смены)
  */
 function assignEmployeesToBrigadeAdvanced(
   employees: (Employee & { type: EmployeeType })[],
   brigadeType: BrigadeType,
   _brigadeNumber: string,
+  alreadyAssigned: (Employee & { type: EmployeeType })[] = [],
 ): (Employee & { type: EmployeeType })[] {
   const requirements = BRIGADE_REQUIREMENTS[brigadeType]
-  const assigned: (Employee & { type: EmployeeType })[] = []
+  const assigned = [...alreadyAssigned]
+
+  // Считаем сколько сотрудников каждого типа уже назначено
+  const alreadyCount = {
+    doctor: alreadyAssigned.filter(e => e.type === 'doctor').length,
+    doctorPediatric: alreadyAssigned.filter(e => e.type === 'doctor_pediatric').length,
+    paramedicIndependent: alreadyAssigned.filter(e => e.type === 'paramedic_independent').length,
+    paramedic: alreadyAssigned.filter(e => e.type === 'paramedic').length,
+    sanitar: alreadyAssigned.filter(e => e.type === 'sanitar').length,
+  }
 
   // Сортируем сотрудников по должности перед распределением
   const sortedEmployees = [...employees].sort((a, b) => {
@@ -115,24 +125,26 @@ function assignEmployeesToBrigadeAdvanced(
   })
 
   // Создаём копии массивов для каждого типа сотрудников из отсортированного списка
+  // Исключаем тех, кто уже назначен
+  const alreadyAssignedNames = new Set(alreadyAssigned.map(e => e.fullName))
   const available = {
-    doctors: sortedEmployees.filter(e => e.type === 'doctor'),
-    doctorsPediatric: sortedEmployees.filter(e => e.type === 'doctor_pediatric'),
-    paramedicsIndependent: sortedEmployees.filter(e => e.type === 'paramedic_independent'),
-    paramedics: sortedEmployees.filter(e => e.type === 'paramedic'),
-    sanitars: sortedEmployees.filter(e => e.type === 'sanitar'),
+    doctors: sortedEmployees.filter(e => e.type === 'doctor' && !alreadyAssignedNames.has(e.fullName)),
+    doctorsPediatric: sortedEmployees.filter(e => e.type === 'doctor_pediatric' && !alreadyAssignedNames.has(e.fullName)),
+    paramedicsIndependent: sortedEmployees.filter(e => e.type === 'paramedic_independent' && !alreadyAssignedNames.has(e.fullName)),
+    paramedics: sortedEmployees.filter(e => e.type === 'paramedic' && !alreadyAssignedNames.has(e.fullName)),
+    sanitars: sortedEmployees.filter(e => e.type === 'sanitar' && !alreadyAssignedNames.has(e.fullName)),
   }
 
-  // 1. Распределяем врачей согласно типу бригады
+  // 1. Распределяем врачей согласно типу бригады (учитывая уже назначенных)
   if (brigadeType === 'bit' && requirements.doctors > 0) {
-    const doctorsNeeded = requirements.doctors
+    const doctorsNeeded = requirements.doctors - alreadyCount.doctor
     for (let i = 0; i < Math.min(doctorsNeeded, available.doctors.length); i++) {
       assigned.push(available.doctors[i])
     }
   }
 
   if (brigadeType === 'pediatric' && requirements.doctors > 0) {
-    const doctorsNeeded = requirements.doctors
+    const doctorsNeeded = requirements.doctors - alreadyCount.doctorPediatric
     for (let i = 0; i < Math.min(doctorsNeeded, available.doctorsPediatric.length); i++) {
       assigned.push(available.doctorsPediatric[i])
     }
@@ -141,7 +153,7 @@ function assignEmployeesToBrigadeAdvanced(
   // 2. Распределяем фельдшеров выезжающих самостоятельно (только для линейных)
   // ВАЖНО: не более 1 фельдшера выезжающего самостоятельно на бригаду
   if (brigadeType === 'linear' && requirements.paramedicsIndependent > 0) {
-    const independentNeeded = Math.min(1, requirements.paramedicsIndependent) // Максимум 1
+    const independentNeeded = Math.min(1, requirements.paramedicsIndependent) - alreadyCount.paramedicIndependent
     for (let i = 0; i < Math.min(independentNeeded, available.paramedicsIndependent.length); i++) {
       assigned.push(available.paramedicsIndependent[i])
     }
@@ -150,10 +162,8 @@ function assignEmployeesToBrigadeAdvanced(
   // 3. Распределяем фельдшеров выездных бригад
   // Фельдшер выездной бригады может и должен быть в любой бригаде
   if (requirements.paramedics > 0) {
-    const paramedicsNeeded = requirements.paramedics
-    const stillNeeded = paramedicsNeeded - assigned.filter(e => e.type === 'paramedic').length
-
-    for (let i = 0; i < Math.min(stillNeeded, available.paramedics.length); i++) {
+    const paramedicsNeeded = requirements.paramedics - alreadyCount.paramedic
+    for (let i = 0; i < Math.min(paramedicsNeeded, available.paramedics.length); i++) {
       if (!assigned.includes(available.paramedics[i])) {
         assigned.push(available.paramedics[i])
       }
@@ -172,7 +182,7 @@ function assignEmployeesToBrigadeAdvanced(
     e.type === 'paramedic_independent'
   )
 
-  if (requirements.sanitars > 0 && hasSeniorStaff && available.sanitars.length > 0) {
+  if (requirements.sanitars > 0 && hasSeniorStaff && alreadyCount.sanitar === 0 && available.sanitars.length > 0) {
     // Проверка: в бригаде не может быть ТОЛЬКО фельдшер выездной бригады и санитар
     // Нужен хотя бы один старший сотрудник (врач, педиатр, фельдшер выезжающий самостоятельно)
     const hasOnlyParamedic = assigned.some(e => e.type === 'paramedic') &&
@@ -303,16 +313,21 @@ export function generateRoster(
       brigade.number,
     )
 
-    // Базовая ночная смена (не-суточные)
-    const assignedNightBase = assignEmployeesToBrigadeAdvanced(
+    // Суточные сотрудники из дневной смены — они уже назначены в ночную смену
+    const employees24h = assignedDay.filter(e => e.shift && e.shift.durationMinutes > 12 * 60)
+
+    // Ночная смена: учитываем суточных как уже назначенных, чтобы не было избытка
+    const assignedNight = assignEmployeesToBrigadeAdvanced(
       nightEmployeesForBrigade,
       brigade.type,
       brigade.number,
-    )
-
-    // Добавляем суточных сотрудников из дневной смены той же бригады
-    const employees24h = assignedDay.filter(e => e.shift && e.shift.durationMinutes > 12 * 60)
-    const assignedNight = [...assignedNightBase, ...employees24h]
+      employees24h,
+    ).sort((a, b) => {
+      const priority = getEmployeePriority(brigade.type)
+      const priorityA = priority[a.type] ?? 999
+      const priorityB = priority[b.type] ?? 999
+      return priorityA - priorityB
+    })
 
     // Удаляем распределённых сотрудников из пула
     const assignedDayKeys = new Set(assignedDay.map(e => e.fullName))
@@ -331,6 +346,28 @@ export function generateRoster(
       employeesNight: assignedNight,
       arrivalTimeDay: formatArrivalTime(brigade.startTime),
       arrivalTimeNight: formatArrivalTimeNight(brigade.startTime),
+    })
+  }
+
+  // Проверка: неразмещённые фельдшеры выезжающие самостоятельно
+  // (их больше, чем линейных бригад)
+  const unassignedIndependentParamedics = [
+    ...dayEmployees.filter(e => e.type === 'paramedic_independent'),
+    ...nightEmployees.filter(e => e.type === 'paramedic_independent'),
+  ]
+  // Убираем дубликаты по fullName
+  const seen = new Set<string>()
+  const uniqueUnassigned = unassignedIndependentParamedics.filter(e => {
+    if (seen.has(e.fullName)) return false
+    seen.add(e.fullName)
+    return true
+  })
+
+  for (const emp of uniqueUnassigned) {
+    warnings.push({
+      code: 'UNASSIGNED_INDEPENDENT_PARAMEDIC',
+      message: `ФВС "${emp.fullName}" не размещён ни в одну из бригад (Линейных бригад меньше чем ФВС), смена "${emp.shift?.start}"\\"${emp.shift?.end}"`,
+      severity: 'warning',
     })
   }
 
