@@ -8,6 +8,7 @@ import type {
   RosterWarning,
   BrigadeType,
 } from '../types'
+import { BRIGADE_TYPE_NAMES } from '../types'
 
 /**
  * Типы сотрудников согласно алгоритму
@@ -39,6 +40,46 @@ const BRIGADE_REQUIREMENTS: Record<BrigadeType, {
   pediatric: { doctors: 1, paramedics: 1, paramedicsIndependent: 0, sanitars: 0 },
   linear: { doctors: 0, paramedics: 1, paramedicsIndependent: 1, sanitars: 0 },
   transport: { doctors: 0, paramedics: 1, paramedicsIndependent: 0, sanitars: 0 },
+}
+
+/**
+ * Генерация номера бригады на основе подстанции и порядкового номера
+ *
+ * Логика:
+ * - Формат: [подстанция][порядковый_номер]
+ * - Для бригад без врача (линейная, перевозка): номера 60-69
+ * - Если номер уже занят, продолжать последовательность
+ */
+function generateBrigadeNumber(
+  substationNumber: number | null,
+  brigadeType: BrigadeType,
+  sequenceNumber: number,
+  existingNumbers: Set<string>,
+): string {
+  const substation = substationNumber ?? 0
+
+  // Для бригад без врача (линейная, перевозка) используем диапазон 60+
+  const needs60Range = brigadeType === 'linear' || brigadeType === 'transport'
+
+  if (needs60Range) {
+    const baseNumber = 60 + sequenceNumber - 1
+
+    // Проверяем, не занят ли номер, ищем свободный
+    let candidate = baseNumber
+    while (existingNumbers.has(`${substation}${candidate}`)) {
+      candidate++
+    }
+
+    return `${substation}${candidate}`
+  }
+
+  // Для врачебных бригад используем обычный порядковый номер
+  let candidate = sequenceNumber
+  while (existingNumbers.has(`${substation}${candidate}`)) {
+    candidate++
+  }
+
+  return `${substation}${candidate}`
 }
 
 /**
@@ -206,7 +247,7 @@ export function generateRoster(
   schedule: ScheduleNormalized,
   options: RosterGeneratorOptions,
 ): RosterData {
-  const { dayNumber, brigades, settings } = options
+  const { dayNumber, brigades, settings, substationNumber } = options
   const warnings: RosterWarning[] = []
 
   // console.log(schedule);
@@ -225,6 +266,17 @@ export function generateRoster(
       } as Employee & { type: EmployeeType }
     })
     .filter((e): e is Employee & { type: EmployeeType } => e !== null)
+
+  // Отслеживаем уже использованные номера бригад
+  const usedBrigadeNumbers = new Set<string>()
+
+  // Счётчики для последовательной нумерации по типам
+  const typeSequenceCounters: Record<BrigadeType, number> = {
+    bit: 0,
+    pediatric: 0,
+    linear: 0,
+    transport: 0,
+  }
 
   // Debug: count employees by type
   const typeCounts: Record<EmployeeType, number> = {
@@ -310,7 +362,7 @@ export function generateRoster(
     const assignedDay = assignEmployeesToBrigadeAdvanced(
       dayEmployeesForBrigade,
       brigade.type,
-      brigade.number,
+      brigade.number ?? '',
     )
 
     // Суточные сотрудники из дневной смены — они уже назначены в ночную смену
@@ -320,7 +372,7 @@ export function generateRoster(
     const assignedNight = assignEmployeesToBrigadeAdvanced(
       nightEmployeesForBrigade,
       brigade.type,
-      brigade.number,
+      brigade.number ?? '',
       employees24h,
     ).sort((a, b) => {
       const priority = getEmployeePriority(brigade.type)
@@ -328,6 +380,63 @@ export function generateRoster(
       const priorityB = priority[b.type] ?? 999
       return priorityA - priorityB
     })
+
+    // Определяем финальные тип и номер бригады
+    let finalBrigadeType = brigade.type
+    let finalBrigadeNumber: string
+
+    const hasDoctorInBrigade = assignedDay.some(e =>
+      e.type === 'doctor' || e.type === 'doctor_pediatric'
+    )
+
+    // Проверяем, нужно ли менять тип бригады
+    // Меняем ТОЛЬКО если: врачебная бригада (БИТ/Пед) и нет врача
+    const isMedicalBrigade = brigade.type === 'bit' || brigade.type === 'pediatric'
+
+    if (isMedicalBrigade && !hasDoctorInBrigade) {
+      // Нет врача во врачебной бригаде → меняем тип
+      const paramedicCount = assignedDay.filter(e => e.type === 'paramedic').length +
+                            assignedNight.filter(e => e.type === 'paramedic').length
+
+      if (paramedicCount >= 2) {
+        finalBrigadeType = 'linear'
+      } else {
+        finalBrigadeType = 'transport'
+      }
+
+      // Генерируем номер в диапазоне 60+
+      typeSequenceCounters[finalBrigadeType]++
+      finalBrigadeNumber = generateBrigadeNumber(
+        substationNumber,
+        finalBrigadeType,
+        typeSequenceCounters[finalBrigadeType],
+        usedBrigadeNumbers,
+      )
+
+      warnings.push({
+        code: 'BRIGADE_TYPE_CHANGED',
+        message: `Бригада ${brigade.number}: нет врача, тип изменён с "${BRIGADE_TYPE_NAMES[brigade.type]}" на "${BRIGADE_TYPE_NAMES[finalBrigadeType]}"`,
+        severity: 'warning',
+      })
+    } else {
+      // Врач есть ИЛИ это линейная бригада → оставляем номер и тип из настроек
+      finalBrigadeType = brigade.type
+
+      // Если номер не задан, генерируем
+      if (!brigade.number || brigade.number.trim() === '') {
+        typeSequenceCounters[brigade.type]++
+        finalBrigadeNumber = generateBrigadeNumber(
+          substationNumber,
+          brigade.type,
+          typeSequenceCounters[brigade.type],
+          usedBrigadeNumbers,
+        )
+      } else {
+        finalBrigadeNumber = brigade.number
+      }
+    }
+
+    usedBrigadeNumbers.add(finalBrigadeNumber)
 
     // Удаляем распределённых сотрудников из пула
     const assignedDayKeys = new Set(assignedDay.map(e => e.fullName))
@@ -337,9 +446,9 @@ export function generateRoster(
     nightEmployees = nightEmployees.filter(e => !assignedNightKeys.has(e.fullName))
 
     brigadeRows.push({
-      key: `brigade-${brigade.number}`,
-      brigadeNumber: brigade.number,
-      brigadeType: brigade.type,
+      key: `brigade-${finalBrigadeNumber}`,
+      brigadeNumber: finalBrigadeNumber,
+      brigadeType: finalBrigadeType,
       shiftDay,
       shiftNight,
       employeesDay: assignedDay,
@@ -409,6 +518,7 @@ export function generateRoster(
     brigades: brigadeRows,
     supportServices,
     notes: ['', '', '', '', ''], // 5 empty note lines
+    numberSubstation: substationNumber ?? 0,
     doctorName: settings.doctorName,
     doctorSignature: settings.doctorSignature,
     nurseName: settings.nurseName,

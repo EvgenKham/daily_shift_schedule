@@ -48,6 +48,7 @@ export function RosterPage() {
 
       // Load settings from localStorage
       const settingsRaw = loadJson<unknown>(SETTINGS_STORAGE_KEY) as {
+        substationNumber?: number | null
         chiefParamedicName?: string
         headOfSubstationName?: string
         brigades?: Array<{ number?: string; type?: string; startTime?: string }>
@@ -62,6 +63,7 @@ export function RosterPage() {
       // Generate roster
       const roster = generateRoster(schedule, {
         dayNumber,
+        substationNumber: settingsRaw.substationNumber ?? null,
         brigades: settingsRaw.brigades.map((b) => ({
           number: String(b.number ?? ''),
           type: b.type as 'bit' | 'pediatric' | 'linear' | 'transport' ?? 'bit',

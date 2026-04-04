@@ -71,6 +71,7 @@ export type RosterData = {
   brigades: BrigadeRow[]
   supportServices: SupportService[]
   notes: string[] // 5 строк примечаний
+  numberSubstation: number
   doctorName: string // Врач СМП (из настроек)
   doctorSignature: string
   nurseName: string // Фельдшер (из настроек)
@@ -90,8 +91,9 @@ export type RosterWarning = {
 
 export type RosterGeneratorOptions = {
   dayNumber: number // день месяца (1-31)
+  substationNumber: number | null // Номер подстанции для генерации номеров бригад
   brigades: Array<{
-    number: string
+    number?: string // Опционально - если не указано, будет сгенерирован автоматически
     type: BrigadeType
     startTime: string
   }>

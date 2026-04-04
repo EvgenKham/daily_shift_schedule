@@ -107,8 +107,6 @@ function createSupportSheet(roster: RosterData): XLSX.WorkSheet {
   // Row 4: Empty spacer
   data.push([{ v: '', t: 's' }])
 
-  let currentRow = 5
-
   // Render each support service
   for (const service of roster.supportServices) {
     // Service header
@@ -142,7 +140,6 @@ function createSupportSheet(roster: RosterData): XLSX.WorkSheet {
 
     // Empty spacer
     data.push([{ v: '', t: 's' }])
-    currentRow += service.positions.length + 3
   }
 
   // Notes section
