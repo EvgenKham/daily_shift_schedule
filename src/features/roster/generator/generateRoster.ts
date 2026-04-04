@@ -458,21 +458,52 @@ export function generateRoster(
     })
   }
 
-  // Проверка: неразмещённые фельдшеры выезжающие самостоятельно
-  // (их больше, чем линейных бригад)
-  const unassignedIndependentParamedics = [
+  // Перераспределение неразмещённых ФВС по линейным бригадам
+  // Проверяем, есть ли линейные бригады без ФВС куда можно добавить сотрудника
+  const unassignedIndependentParamedicsDay = dayEmployees.filter(e => e.type === 'paramedic_independent')
+  const unassignedIndependentParamedicsNight = nightEmployees.filter(e => e.type === 'paramedic_independent')
+
+  for (const emp of unassignedIndependentParamedicsDay) {
+    // Ищем линейную бригаду без ФВС в дневной смене
+    const targetBrigade = brigadeRows.find(row =>
+      row.brigadeType === 'linear' &&
+      !row.employeesDay.some((e: any) => e.type === 'paramedic_independent')
+    )
+
+    if (targetBrigade) {
+      targetBrigade.employeesDay.unshift(emp)
+      const idx = dayEmployees.indexOf(emp)
+      if (idx !== -1) dayEmployees.splice(idx, 1)
+    }
+  }
+
+  for (const emp of unassignedIndependentParamedicsNight) {
+    // Ищем линейную бригаду без ФВС в ночной смене
+    const targetBrigade = brigadeRows.find(row =>
+      row.brigadeType === 'linear' &&
+      !row.employeesNight.some((e: any) => e.type === 'paramedic_independent')
+    )
+
+    if (targetBrigade) {
+      targetBrigade.employeesNight.unshift(emp)
+      const idx = nightEmployees.indexOf(emp)
+      if (idx !== -1) nightEmployees.splice(idx, 1)
+    }
+  }
+
+  // Проверка: оставшиеся неразмещённые ФВС
+  const stillUnassignedIndependent = [
     ...dayEmployees.filter(e => e.type === 'paramedic_independent'),
     ...nightEmployees.filter(e => e.type === 'paramedic_independent'),
   ]
-  // Убираем дубликаты по fullName
   const seen = new Set<string>()
-  const uniqueUnassigned = unassignedIndependentParamedics.filter(e => {
+  const uniqueStillUnassigned = stillUnassignedIndependent.filter(e => {
     if (seen.has(e.fullName)) return false
     seen.add(e.fullName)
     return true
   })
 
-  for (const emp of uniqueUnassigned) {
+  for (const emp of uniqueStillUnassigned) {
     warnings.push({
       code: 'UNASSIGNED_INDEPENDENT_PARAMEDIC',
       message: `ФВС "${emp.fullName}" не размещён ни в одну из бригад (Линейных бригад меньше чем ФВС), смена "${emp.shift?.start}"\\"${emp.shift?.end}"`,
