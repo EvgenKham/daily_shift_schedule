@@ -9,10 +9,10 @@ type StartTime = '7:00' | '7:30' | '8:00' | '8:30' | '9:00'
 const START_TIMES: StartTime[] = ['7:00', '7:30', '8:00', '8:30', '9:00']
 
 const BRIGADE_TYPE_COLORS: Record<BrigadeType, string> = {
-  bit: '#FF9900',
-  pediatric: '#CCCC33',
-  linear: '#99FF99',
-  transport: '#66CCFF',
+  bit: '#ca3956',
+  pediatric: '#b6a511',
+  linear: '#78c98b',
+  transport: '#008da0',
 }
 
 function formatStartTimeLabel(t: StartTime) {
@@ -125,7 +125,7 @@ export function SettingsPage() {
               </Form.Item>
             </Space>
 
-            <Card size="small" title="Бригады" style={{ marginTop: 8 }}>
+            <Card size="small" title="Бригады" style={{ marginTop: 8, backgroundColor: "#e2e2e2"}}>
               <Form.List name="brigades">
                 {(fields, { add, remove }) => (
                   <>
@@ -188,7 +188,6 @@ export function SettingsPage() {
                                   { value: 'bit', label: 'БИТ' },
                                   { value: 'pediatric', label: 'Педиатрическая' },
                                   { value: 'linear', label: 'Линейная' },
-                                  { value: 'transport', label: 'Перевозка' },
                                 ]}
                               />
                             </Form.Item>

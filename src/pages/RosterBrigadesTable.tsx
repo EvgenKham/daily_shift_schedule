@@ -2,10 +2,17 @@ import { Table, Typography, Input, Space } from 'antd'
 import type { TableColumnsType } from 'antd'
 import { useState } from 'react'
 
-import type { BrigadeRow, Employee } from '../features/roster/types'
+import type { BrigadeRow, Employee, BrigadeType } from '../features/roster/types'
 import { BRIGADE_TYPE_NAMES } from '../features/roster/types'
 
 const { Text } = Typography
+
+const BRIGADE_TYPE_COLORS: Record<BrigadeType, string> = {
+  bit: '#ca3956',
+  pediatric: '#b6a511',
+  linear: '#78c98b',
+  transport: '#008da0',
+}
 
 interface RosterBrigadesTableProps {
   brigades: BrigadeRow[]
@@ -70,6 +77,7 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
                 <Input
                   defaultValue={emp.fullName}
                   size="small"
+                  style={{ width: '90%' }}
                   onBlur={(e) => handleEmployeeEdit(brigadeKey, shiftType, idx, e.target.value)}
                   onPressEnter={(e) => handleEmployeeEdit(brigadeKey, shiftType, idx, e.currentTarget.value)}
                   autoFocus
@@ -96,9 +104,13 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
       dataIndex: 'brigadeNumber',
       key: 'brigade-day',
       width: 120,
+      align: 'center',
       render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <Text strong>{BRIGADE_TYPE_NAMES[record.brigadeType]} {record.brigadeNumber}</Text>
+        <Space direction="vertical" size={0} style={{ alignItems: 'center' }}>
+          <Text strong>
+            {BRIGADE_TYPE_NAMES[record.brigadeType]}
+          </Text>
+          <Text strong>{record.brigadeNumber}</Text>
           <Text type="secondary">{record.shiftDay}</Text>
         </Space>
       ),
@@ -119,9 +131,13 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
       title: 'Бригада\\смена',
       key: 'brigade-night',
       width: 120,
+      align: 'center',
       render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <Text strong>{BRIGADE_TYPE_NAMES[record.brigadeType]} {record.brigadeNumber}</Text>
+        <Space direction="vertical" size={0} style={{ alignItems: 'center' }}>
+          <Text strong>
+            {BRIGADE_TYPE_NAMES[record.brigadeType]}
+          </Text>
+          <Text strong>{record.brigadeNumber}</Text>
           <Text type="secondary">{record.shiftNight}</Text>
         </Space>
       ),
@@ -140,14 +156,37 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
   ]
 
   return (
-    <Table
-      columns={columns}
-      dataSource={brigades}
-      rowKey="key"
-      pagination={false}
-      size="small"
-      bordered
-      locale={{ emptyText: 'Нет бригад на эту смену' }}
-    />
+    <div className="roster-brigades-table">
+      <style>{`
+        .roster-brigades-table .ant-table-cell-row-hover {
+          background-color: transparent !important;
+        }
+        .roster-brigades-table .ant-table-cell,
+        .roster-brigades-table .ant-table-thead > th,
+        .roster-brigades-table .ant-table-tbody > td {
+          border-color: #a5a5a5 !important;
+        }
+      `}</style>
+      <Table
+        columns={columns}
+        dataSource={brigades}
+        rowKey="key"
+        pagination={false}
+        size="small"
+        bordered
+        locale={{ emptyText: 'Нет бригад на эту смену' }}
+        onRow={(record) => ({
+          style: {
+            backgroundColor: BRIGADE_TYPE_COLORS[record.brigadeType] + '33',
+          },
+          onMouseEnter: (e) => {
+            (e.currentTarget as HTMLElement).style.backgroundColor = BRIGADE_TYPE_COLORS[record.brigadeType] + '33'
+          },
+          onMouseLeave: (e) => {
+            (e.currentTarget as HTMLElement).style.backgroundColor = BRIGADE_TYPE_COLORS[record.brigadeType] + '33'
+          },
+        })}
+      />
+    </div>
   )
 }
