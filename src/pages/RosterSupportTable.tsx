@@ -91,11 +91,11 @@ export function RosterSupportTable({
     {
       title: 'смена',
       key: 'shift-day',
-      width: 60,
+      width: 100,
       align: 'center',
       render: (_, record) => {
         if (record.type === 'service-header') return null
-        return <Text strong>{record.shiftDay}</Text>
+        return record.shiftDay ? <Text strong>{record.shiftDay}</Text> : <Text type="secondary">—</Text>
       },
     },
     {
@@ -103,6 +103,8 @@ export function RosterSupportTable({
       key: 'composition-day',
       render: (_, record) => {
         if (record.type === 'service-header') return null
+        if (!record.shiftDay) return <Text type="secondary">—</Text>
+
         const emp = record.position.employeeDay
         if (!emp) return <Text type="secondary">—</Text>
 
@@ -138,11 +140,11 @@ export function RosterSupportTable({
     {
       title: 'смена',
       key: 'shift-night',
-      width: 60,
+      width: 100,
       align: 'center',
       render: (_, record) => {
         if (record.type === 'service-header') return null
-        return <Text strong>{record.shiftNight}</Text>
+        return record.shiftNight ? <Text strong>{record.shiftNight}</Text> : <Text type="secondary">—</Text>
       },
     },
     {
@@ -150,6 +152,8 @@ export function RosterSupportTable({
       key: 'composition-night',
       render: (_, record) => {
         if (record.type === 'service-header') return null
+        if (!record.shiftNight) return <Text type="secondary">—</Text>
+
         const emp = record.position.employeeNight
         if (!emp) return <Text type="secondary">—</Text>
 
@@ -180,7 +184,10 @@ export function RosterSupportTable({
       title: 'Время\nприхода\\ухода\nподпись',
       key: 'arrival-night',
       width: 100,
-      render: () => '',
+      render: (_, record) => {
+        if (record.type === 'service-header') return null
+        return record.shiftNight ? '' : <Text type="secondary">—</Text>
+      },
     },
   ]
 

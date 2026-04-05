@@ -7,6 +7,7 @@ import type {
   Employee,
   RosterWarning,
   BrigadeType,
+  SupportPosition,
 } from '../types'
 import { BRIGADE_TYPE_NAMES } from '../types'
 
@@ -304,8 +305,9 @@ export function generateRoster(
     return isNightStart || is24Hour
   })
 
-  console.log(dayEmployees);
-  console.log(nightEmployees);
+  // console.log(dayEmployees);
+  // console.log(nightEmployees);
+
   // Generate brigade rows with proper employee assignment
   const brigadeRows: BrigadeRow[] = []
 
@@ -679,7 +681,7 @@ function classifyEmployee(roleLabel: string): EmployeeType {
   }
 
   // Уборщик служебных помещений
-  if (role.includes('уборщ') && role.includes('помещ')) {
+  if (role.includes('уборщ') && role.includes('служ') && role.includes('помещ')) {
     return 'cleaner_office'
   }
 
@@ -715,33 +717,77 @@ function generateSupportServices(employees: Employee[]): SupportService[] {
     })
   }
 
-  // ДИСПЕТЧЕРСКАЯ (2 диспетчера в сутки: 2 днём, 2 ночью)
+  // ДИСПЕТЧЕРСКАЯ
   const dispatchers = findByKeyword(['диспетчер', 'дисп'])
   if (dispatchers.length > 0) {
-    services.push({
-      name: 'DISPATCHER',
-      displayName: 'ДИСПЕТЧЕРСКАЯ',
-      positions: [
-        {
-          key: 'dispatcher-1',
-          shiftDay: '8\\20',
-          shiftNight: '20\\8',
-          employeeDay: dispatchers[0],
-          employeeNight: dispatchers[2] || dispatchers[0],
-          arrivalTimeDay: '8:00',
-          arrivalTimeNight: '20:00',
-        },
-        {
-          key: 'dispatcher-2',
-          shiftDay: '8\\20',
-          shiftNight: '20\\8',
-          employeeDay: dispatchers[1] || dispatchers[0],
-          employeeNight: dispatchers[3] || dispatchers[2] || dispatchers[1] || dispatchers[0],
-          arrivalTimeDay: '8:00',
-          arrivalTimeNight: '20:00',
-        },
-      ],
+    // Helper для формирования строки смены из данных сотрудника
+    const formatShift = (emp: Employee): string => {
+      if (!emp.shift) return '8\\20'
+      const start = parseFloat(emp.shift.start).toString()
+      const end = parseFloat(emp.shift.end).toString()
+      return `${start}\\${end}`
+    }
+
+    // Helper для времени прихода
+    const formatArrival = (emp: Employee): string => {
+      if (!emp.shift) return '8:00'
+      return emp.shift.start
+    }
+
+    // Определяем тип смены по длительности и времени начала
+    const is24Hour = (emp: Employee): boolean => {
+      return !!emp.shift && emp.shift.durationMinutes > 12 * 60
+    }
+
+    const isDayShift = (emp: Employee): boolean => {
+      if (!emp.shift) return true
+      const startHour = parseInt(emp.shift.start.split(':')[0], 10)
+      return startHour >= 6 && startHour < 18 // Дневная смена: 6:00 - 17:59
+    }
+
+    // Разделяем на группы
+    const dayDispatchers = dispatchers.filter(emp => !is24Hour(emp) && isDayShift(emp))
+    const nightDispatchers = dispatchers.filter(emp => !is24Hour(emp) && !isDayShift(emp))
+    const shiftDispatchers = dispatchers.filter(emp => is24Hour(emp))
+
+    const positions: SupportPosition[] = []
+
+    // Формируем пары: дневной + ночной в одной строке
+    const maxPairs = Math.max(dayDispatchers.length, nightDispatchers.length)
+    for (let i = 0; i < maxPairs; i++) {
+      const dayEmp = dayDispatchers[i]
+      const nightEmp = nightDispatchers[i]
+      positions.push({
+        key: `dispatcher-${i}`,
+        shiftDay: dayEmp ? formatShift(dayEmp) : '',
+        shiftNight: nightEmp ? formatShift(nightEmp) : '',
+        employeeDay: dayEmp,
+        employeeNight: nightEmp,
+        arrivalTimeDay: dayEmp ? formatArrival(dayEmp) : '',
+        arrivalTimeNight: nightEmp ? formatArrival(nightEmp) : '',
+      })
+    }
+
+    // Суточные диспетчеры — отдельные строки с обеими сменами
+    shiftDispatchers.forEach((emp, i) => {
+      positions.push({
+        key: `dispatcher-shift-${i}`,
+        shiftDay: '8\\20',
+        shiftNight: '20\\8',
+        employeeDay: emp,
+        employeeNight: emp,
+        arrivalTimeDay: formatArrival(emp),
+        arrivalTimeNight: formatArrival(emp),
+      })
     })
+
+    if (positions.length > 0) {
+      services.push({
+        name: 'DISPATCHER',
+        displayName: 'ДИСПЕТЧЕРСКАЯ',
+        positions,
+      })
+    }
   }
 
   // ЗАПРАВОЧНЫЙ БЛОК
@@ -765,7 +811,7 @@ function generateSupportServices(employees: Employee[]): SupportService[] {
   }
 
   // УБОРЩИК ПОМЕЩЕНИЙ
-  const cleanersPremises = findByKeyword(['уборщик помещ', 'уборщица помещ', 'уборщик служеб'])
+  const cleanersPremises = findByKeyword(['уборщ', 'служ', 'помещ'])
   if (cleanersPremises.length > 0) {
     services.push({
       name: 'CLEANER_PREMISES',
@@ -798,6 +844,7 @@ function generateSupportServices(employees: Employee[]): SupportService[] {
     })
   }
 
+  console.log(services);
   return services
 }
 
