@@ -37,8 +37,8 @@ const BRIGADE_REQUIREMENTS: Record<BrigadeType, {
   sanitars: number
 }> = {
   bit: { doctors: 1, paramedics: 2, paramedicsIndependent: 0, sanitars: 1 },
-  pediatric: { doctors: 1, paramedics: 1, paramedicsIndependent: 0, sanitars: 0 },
-  linear: { doctors: 0, paramedics: 1, paramedicsIndependent: 1, sanitars: 0 },
+  pediatric: { doctors: 1, paramedics: 1, paramedicsIndependent: 0, sanitars: 1 },
+  linear: { doctors: 0, paramedics: 1, paramedicsIndependent: 1, sanitars: 1 },
   transport: { doctors: 0, paramedics: 1, paramedicsIndependent: 0, sanitars: 0 },
 }
 
@@ -381,11 +381,17 @@ export function generateRoster(
       return priorityA - priorityB
     })
 
-    // Определяем финальные тип и номер бригады
-    let finalBrigadeType = brigade.type
-    let finalBrigadeNumber: string
+    // Определяем тип бригады отдельно для ДНЯ и НОЧИ
+    let finalBrigadeTypeDay = brigade.type
+    let finalBrigadeTypeNight = brigade.type
+    let finalBrigadeNumberDay: string
+    let finalBrigadeNumberNight: string
 
-    const hasDoctorInBrigade = assignedDay.some(e =>
+    // Проверяем наличие врача в ДНЕВНОЙ и НОЧНОЙ сменах
+    const hasDoctorDay = assignedDay.some(e =>
+      e.type === 'doctor' || e.type === 'doctor_pediatric'
+    )
+    const hasDoctorNight = assignedNight.some(e =>
       e.type === 'doctor' || e.type === 'doctor_pediatric'
     )
 
@@ -393,50 +399,78 @@ export function generateRoster(
     // Меняем ТОЛЬКО если: врачебная бригада (БИТ/Пед) и нет врача
     const isMedicalBrigade = brigade.type === 'bit' || brigade.type === 'pediatric'
 
-    if (isMedicalBrigade && !hasDoctorInBrigade) {
-      // Нет врача во врачебной бригаде → меняем тип
-      const paramedicCount = assignedDay.filter(e => e.type === 'paramedic').length +
-                            assignedNight.filter(e => e.type === 'paramedic').length
-
-      if (paramedicCount >= 2) {
-        finalBrigadeType = 'linear'
+    // Определяем тип для ДНЕВНОЙ смены
+    if (isMedicalBrigade && !hasDoctorDay) {
+      const paramedicCountDay = assignedDay.filter(e => e.type === 'paramedic').length
+      if (paramedicCountDay >= 2) {
+        finalBrigadeTypeDay = 'linear'
       } else {
-        finalBrigadeType = 'transport'
-      }
-
-      // Генерируем номер в диапазоне 60+
-      typeSequenceCounters[finalBrigadeType]++
-      finalBrigadeNumber = generateBrigadeNumber(
-        substationNumber,
-        finalBrigadeType,
-        typeSequenceCounters[finalBrigadeType],
-        usedBrigadeNumbers,
-      )
-
-      warnings.push({
-        code: 'BRIGADE_TYPE_CHANGED',
-        message: `Бригада ${brigade.number}: нет врача, тип изменён с "${BRIGADE_TYPE_NAMES[brigade.type]}" на "${BRIGADE_TYPE_NAMES[finalBrigadeType]}"`,
-        severity: 'warning',
-      })
-    } else {
-      // Врач есть ИЛИ это линейная бригада → оставляем номер и тип из настроек
-      finalBrigadeType = brigade.type
-
-      // Если номер не задан, генерируем
-      if (!brigade.number || brigade.number.trim() === '') {
-        typeSequenceCounters[brigade.type]++
-        finalBrigadeNumber = generateBrigadeNumber(
-          substationNumber,
-          brigade.type,
-          typeSequenceCounters[brigade.type],
-          usedBrigadeNumbers,
-        )
-      } else {
-        finalBrigadeNumber = brigade.number
+        finalBrigadeTypeDay = 'transport'
       }
     }
 
-    usedBrigadeNumbers.add(finalBrigadeNumber)
+    // Определяем тип для НОЧНОЙ смены
+    if (isMedicalBrigade && !hasDoctorNight) {
+      const paramedicCountNight = assignedNight.filter(e => e.type === 'paramedic').length
+      if (paramedicCountNight >= 2) {
+        finalBrigadeTypeNight = 'linear'
+      } else {
+        finalBrigadeTypeNight = 'transport'
+      }
+    }
+
+    // Предупреждение если тип изменился
+    if (isMedicalBrigade && (!hasDoctorDay || !hasDoctorNight)) {
+      const changedParts = []
+      if (!hasDoctorDay) changedParts.push('день')
+      if (!hasDoctorNight) changedParts.push('ночь')
+
+      warnings.push({
+        code: 'BRIGADE_TYPE_CHANGED',
+        message: `Бригада ${brigade.number}: нет врача (${changedParts.join(', ')}), тип изменён с "${BRIGADE_TYPE_NAMES[brigade.type]}" на "${BRIGADE_TYPE_NAMES[finalBrigadeTypeDay]}" / "${BRIGADE_TYPE_NAMES[finalBrigadeTypeNight]}"`,
+        severity: 'warning',
+      })
+    }
+
+    // Определяем номер для ДНЕВНОЙ смены
+    // Для линейных бригад — используем номер из настроек
+    // Для врачебных бригад без врача — генерируем в диапазоне 60+
+    const needs60RangeDay = isMedicalBrigade && !hasDoctorDay
+
+    if (!needs60RangeDay) {
+      // Линейная бригада или врачебная с врачом → номер из настроек
+      finalBrigadeNumberDay = brigade.number ?? ''
+    } else {
+      // Врачебная без врача → генерируем номер
+      typeSequenceCounters['linear']++
+      finalBrigadeNumberDay = generateBrigadeNumber(
+        substationNumber,
+        'linear',
+        typeSequenceCounters['linear'],
+        usedBrigadeNumbers,
+      )
+    }
+
+    usedBrigadeNumbers.add(finalBrigadeNumberDay)
+
+    // Определяем номер для НОЧНОЙ смены
+    const needs60RangeNight = isMedicalBrigade && !hasDoctorNight
+
+    if (!needs60RangeNight) {
+      // Линейная бригада или врачебная с врачом → номер из настроек
+      finalBrigadeNumberNight = brigade.number ?? ''
+    } else {
+      // Врачебная без врача → генерируем номер
+      typeSequenceCounters['linear']++
+      finalBrigadeNumberNight = generateBrigadeNumber(
+        substationNumber,
+        'linear',
+        typeSequenceCounters['linear'],
+        usedBrigadeNumbers,
+      )
+    }
+
+    usedBrigadeNumbers.add(finalBrigadeNumberNight)
 
     // Удаляем распределённых сотрудников из пула
     const assignedDayKeys = new Set(assignedDay.map(e => e.fullName))
@@ -446,9 +480,11 @@ export function generateRoster(
     nightEmployees = nightEmployees.filter(e => !assignedNightKeys.has(e.fullName))
 
     brigadeRows.push({
-      key: `brigade-${finalBrigadeNumber}`,
-      brigadeNumber: finalBrigadeNumber,
-      brigadeType: finalBrigadeType,
+      key: `brigade-${finalBrigadeNumberDay}-${finalBrigadeNumberNight}`,
+      brigadeNumberDay: finalBrigadeNumberDay,
+      brigadeNumberNight: finalBrigadeNumberNight,
+      brigadeTypeDay: finalBrigadeTypeDay,
+      brigadeTypeNight: finalBrigadeTypeNight,
       shiftDay,
       shiftNight,
       employeesDay: assignedDay,
@@ -466,7 +502,7 @@ export function generateRoster(
   for (const emp of unassignedIndependentParamedicsDay) {
     // Ищем линейную бригаду без ФВС в дневной смене
     const targetBrigade = brigadeRows.find(row =>
-      row.brigadeType === 'linear' &&
+      row.brigadeTypeDay === 'linear' &&
       !row.employeesDay.some((e: any) => e.type === 'paramedic_independent')
     )
 
@@ -480,7 +516,7 @@ export function generateRoster(
   for (const emp of unassignedIndependentParamedicsNight) {
     // Ищем линейную бригаду без ФВС в ночной смене
     const targetBrigade = brigadeRows.find(row =>
-      row.brigadeType === 'linear' &&
+      row.brigadeTypeNight === 'linear' &&
       !row.employeesNight.some((e: any) => e.type === 'paramedic_independent')
     )
 
@@ -519,14 +555,14 @@ export function generateRoster(
     if (row.employeesDay.length === 0) {
       warnings.push({
         code: 'EMPTY_BRIGADE_DAY',
-        message: `Бригада ${row.brigadeNumber} (день): нет сотрудников`,
+        message: `Бригада ${row.brigadeNumberDay} (день): нет сотрудников`,
         severity: 'warning',
       })
     }
     if (row.employeesNight.length === 0) {
       warnings.push({
         code: 'EMPTY_BRIGADE_NIGHT',
-        message: `Бригада ${row.brigadeNumber} (ночь): нет сотрудников`,
+        message: `Бригада ${row.brigadeNumberDay} (ночь): нет сотрудников`,
         severity: 'warning',
       })
     }

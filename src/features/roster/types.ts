@@ -25,8 +25,10 @@ export type Employee = {
 
 export type BrigadeRow = {
   key: string
-  brigadeNumber: string
-  brigadeType: BrigadeType
+  brigadeNumberDay: string
+  brigadeNumberNight: string
+  brigadeTypeDay: BrigadeType
+  brigadeTypeNight: BrigadeType
   shiftDay: string // '8\\20', '9\\21', etc.
   shiftNight: string // '20\\8', '21\\9', etc.
   employeesDay: Employee[]

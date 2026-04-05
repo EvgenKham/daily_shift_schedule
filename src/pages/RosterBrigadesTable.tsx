@@ -84,6 +84,7 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
                 />
               ) : (
                 <div
+                  className="employee-name"
                   onClick={() => setEditingCell(cellKey)}
                   style={{ cursor: 'pointer', padding: '2px 4px', borderRadius: 2 }}
                   title="Нажмите для редактирования"
@@ -101,16 +102,19 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
   const columns: TableColumnsType<BrigadeRow> = [
     {
       title: 'Бригада\\смена',
-      dataIndex: 'brigadeNumber',
+      dataIndex: 'brigadeNumberDay',
       key: 'brigade-day',
       width: 120,
       align: 'center',
+      onCell: (record) => ({
+        style: { backgroundColor: BRIGADE_TYPE_COLORS[record.brigadeTypeDay] + '33' },
+      }),
       render: (_, record) => (
         <Space direction="vertical" size={0} style={{ alignItems: 'center' }}>
           <Text strong>
-            {BRIGADE_TYPE_NAMES[record.brigadeType]}
+            {BRIGADE_TYPE_NAMES[record.brigadeTypeDay]}
           </Text>
-          <Text strong>{record.brigadeNumber}</Text>
+          <Text strong>{record.brigadeNumberDay}</Text>
           <Text type="secondary">{record.shiftDay}</Text>
         </Space>
       ),
@@ -119,12 +123,18 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
       title: 'Состав бригады (день)',
       dataIndex: 'employeesDay',
       key: 'composition-day',
+      onCell: (record) => ({
+        style: { backgroundColor: BRIGADE_TYPE_COLORS[record.brigadeTypeDay] + '33' },
+      }),
       render: (_, record) => renderEmployeeList(record.employeesDay, 'day', record.key),
     },
     {
       title: 'Время\nприхода\\ухода\nподпись',
       key: 'arrival-signature-day',
       width: 100,
+      onCell: (record) => ({
+        style: { backgroundColor: BRIGADE_TYPE_COLORS[record.brigadeTypeDay] + '33' },
+      }),
       render: () => '',
     },
     {
@@ -132,12 +142,15 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
       key: 'brigade-night',
       width: 120,
       align: 'center',
+      onCell: (record) => ({
+        style: { backgroundColor: BRIGADE_TYPE_COLORS[record.brigadeTypeNight] + '33' },
+      }),
       render: (_, record) => (
         <Space direction="vertical" size={0} style={{ alignItems: 'center' }}>
           <Text strong>
-            {BRIGADE_TYPE_NAMES[record.brigadeType]}
+            {BRIGADE_TYPE_NAMES[record.brigadeTypeNight]}
           </Text>
-          <Text strong>{record.brigadeNumber}</Text>
+          <Text strong>{record.brigadeNumberNight}</Text>
           <Text type="secondary">{record.shiftNight}</Text>
         </Space>
       ),
@@ -145,12 +158,18 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
     {
       title: 'Состав бригады (ночь)',
       key: 'composition-night',
+      onCell: (record) => ({
+        style: { backgroundColor: BRIGADE_TYPE_COLORS[record.brigadeTypeNight] + '33' },
+      }),
       render: (_, record) => renderEmployeeList(record.employeesNight, 'night', record.key),
     },
     {
       title: 'Время\nприхода\\ухода\nподпись',
       key: 'arrival-signature-night',
       width: 100,
+      onCell: (record) => ({
+        style: { backgroundColor: BRIGADE_TYPE_COLORS[record.brigadeTypeNight] + '33' },
+      }),
       render: () => '',
     },
   ]
@@ -166,6 +185,10 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
         .roster-brigades-table .ant-table-tbody > td {
           border-color: #a5a5a5 !important;
         }
+        .roster-brigades-table .employee-name:hover {
+          background-color: #ffffff;
+          border-radius: 4px;
+        }
       `}</style>
       <Table
         columns={columns}
@@ -175,17 +198,6 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
         size="small"
         bordered
         locale={{ emptyText: 'Нет бригад на эту смену' }}
-        onRow={(record) => ({
-          style: {
-            backgroundColor: BRIGADE_TYPE_COLORS[record.brigadeType] + '33',
-          },
-          onMouseEnter: (e) => {
-            (e.currentTarget as HTMLElement).style.backgroundColor = BRIGADE_TYPE_COLORS[record.brigadeType] + '33'
-          },
-          onMouseLeave: (e) => {
-            (e.currentTarget as HTMLElement).style.backgroundColor = BRIGADE_TYPE_COLORS[record.brigadeType] + '33'
-          },
-        })}
       />
     </div>
   )
