@@ -104,7 +104,7 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
       title: 'Бригада\\смена',
       dataIndex: 'brigadeNumberDay',
       key: 'brigade-day',
-      width: 120,
+      width: 100,
       align: 'center',
       onCell: (record) => ({
         style: { backgroundColor: BRIGADE_TYPE_COLORS[record.brigadeTypeDay] + '33' },
@@ -140,7 +140,7 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
     {
       title: 'Бригада\\смена',
       key: 'brigade-night',
-      width: 120,
+      width: 100,
       align: 'center',
       onCell: (record) => ({
         style: { backgroundColor: BRIGADE_TYPE_COLORS[record.brigadeTypeNight] + '33' },
@@ -186,7 +186,6 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
           border-color: #a5a5a5 !important;
         }
         .roster-brigades-table .employee-name:hover {
-          background-color: #ffffff;
           border-radius: 4px;
         }
       `}</style>
