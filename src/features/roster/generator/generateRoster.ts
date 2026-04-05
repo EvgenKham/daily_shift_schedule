@@ -285,6 +285,11 @@ export function generateRoster(
   const DAY_START_TIMES = ['7:00', '7:30', '8:00', '9:00']
   const NIGHT_START_TIMES = ['19:00', '19:30', '20:00', '21:00']
 
+  // Helper для добавления префикса (С/Д/Н)
+  const addPrefixToEmployees = (employees: (Employee & { type: EmployeeType })[], prefix: string) => {
+    return employees.map(e => ({ ...e, prefix }))
+  }
+
   let dayEmployees = employeesOnDay.filter((e) => {
     if (!e.shift) return false
     return DAY_START_TIMES.includes(e.shift.start)
@@ -299,6 +304,8 @@ export function generateRoster(
     return isNightStart || is24Hour
   })
 
+  console.log(dayEmployees);
+  console.log(nightEmployees);
   // Generate brigade rows with proper employee assignment
   const brigadeRows: BrigadeRow[] = []
 
@@ -464,6 +471,18 @@ export function generateRoster(
     dayEmployees = dayEmployees.filter(e => !assignedDayKeys.has(e.fullName))
     nightEmployees = nightEmployees.filter(e => !assignedNightKeys.has(e.fullName))
 
+    // Применяем префикс (С/Д/Н) к сотрудникам
+    const employeesDayWithPrefix = addPrefixToEmployees(assignedDay, 'Д')
+    const employeesNightWithPrefix = addPrefixToEmployees(assignedNight, 'Н')
+
+    // Суточные: меняем префикс на "С" для тех, кто работает > 12 часов
+    employeesDayWithPrefix.forEach(e => {
+      if (e.shift && e.shift.durationMinutes > 12 * 60) e.prefix = 'С'
+    })
+    employeesNightWithPrefix.forEach(e => {
+      if (e.shift && e.shift.durationMinutes > 12 * 60) e.prefix = 'С'
+    })
+
     brigadeRows.push({
       key: `brigade-${finalBrigadeNumberDay}-${finalBrigadeNumberNight}`,
       brigadeNumberDay: finalBrigadeNumberDay,
@@ -472,15 +491,15 @@ export function generateRoster(
       brigadeTypeNight: finalBrigadeTypeNight,
       shiftDay,
       shiftNight,
-      employeesDay: assignedDay,
-      employeesNight: assignedNight,
+      employeesDay: employeesDayWithPrefix,
+      employeesNight: employeesNightWithPrefix,
       arrivalTimeDay: formatArrivalTime(brigade.startTime),
       arrivalTimeNight: formatArrivalTimeNight(brigade.startTime),
     })
 
     // Проверка: только 1 ФВС без других сотрудников (день)
-    const onlyIndependentDay = assignedDay.length === 1 &&
-      assignedDay[0]?.type === 'paramedic_independent'
+    const onlyIndependentDay = employeesDayWithPrefix.length === 1 &&
+      employeesDayWithPrefix[0]?.type === 'paramedic_independent'
     if (onlyIndependentDay) {
       warnings.push({
         code: 'SOLO_INDEPENDENT_PARAMEDIC_DAY',
@@ -490,8 +509,8 @@ export function generateRoster(
     }
 
     // Проверка: только 1 ФВС без других сотрудников (ночь)
-    const onlyIndependentNight = assignedNight.length === 1 &&
-      assignedNight[0]?.type === 'paramedic_independent'
+    const onlyIndependentNight = employeesNightWithPrefix.length === 1 &&
+      employeesNightWithPrefix[0]?.type === 'paramedic_independent'
     if (onlyIndependentNight) {
       warnings.push({
         code: 'SOLO_INDEPENDENT_PARAMEDIC_NIGHT',
@@ -696,7 +715,7 @@ function generateSupportServices(employees: Employee[]): SupportService[] {
     })
   }
 
-  // ДИСПЕТЧЕРСКАЯ
+  // ДИСПЕТЧЕРСКАЯ (2 диспетчера в сутки: 2 днём, 2 ночью)
   const dispatchers = findByKeyword(['диспетчер', 'дисп'])
   if (dispatchers.length > 0) {
     services.push({
@@ -708,7 +727,16 @@ function generateSupportServices(employees: Employee[]): SupportService[] {
           shiftDay: '8\\20',
           shiftNight: '20\\8',
           employeeDay: dispatchers[0],
-          employeeNight: dispatchers[1] || dispatchers[0],
+          employeeNight: dispatchers[2] || dispatchers[0],
+          arrivalTimeDay: '8:00',
+          arrivalTimeNight: '20:00',
+        },
+        {
+          key: 'dispatcher-2',
+          shiftDay: '8\\20',
+          shiftNight: '20\\8',
+          employeeDay: dispatchers[1] || dispatchers[0],
+          employeeNight: dispatchers[3] || dispatchers[2] || dispatchers[1] || dispatchers[0],
           arrivalTimeDay: '8:00',
           arrivalTimeNight: '20:00',
         },
