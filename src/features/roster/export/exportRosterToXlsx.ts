@@ -50,11 +50,11 @@ function createBrigadesSheet(roster: RosterData): XLSX.WorkSheet {
     const employeesNight = brigade.employeesNight.map((e) => e.fullName).join('; ')
 
     data.push([
-      { v: `${brigade.brigadeNumber} ${brigade.shiftDay}`, t: 's' },
+      { v: `${brigade.brigadeNumberDay} ${brigade.shiftDay}`, t: 's' },
       { v: employeesDay || '—', t: 's' },
       { v: brigade.arrivalTimeDay || '', t: 's' },
       { v: '', t: 's' },
-      { v: `${brigade.brigadeNumber} ${brigade.shiftNight}`, t: 's' },
+      { v: `${brigade.brigadeNumberDay} ${brigade.shiftNight}`, t: 's' },
       { v: employeesNight || '—', t: 's' },
       { v: brigade.arrivalTimeNight || '', t: 's' },
       { v: '', t: 's' },

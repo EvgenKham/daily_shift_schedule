@@ -177,7 +177,7 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
   return (
     <div className="roster-brigades-table">
       <style>{`
-        .roster-brigades-table .ant-table-cell-row-hover {
+        tr {
           background-color: transparent !important;
         }
         .roster-brigades-table .ant-table-cell,
