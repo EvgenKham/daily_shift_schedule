@@ -95,7 +95,7 @@ export function RosterSupportTable({
       align: 'center',
       render: (_, record) => {
         if (record.type === 'service-header') return null
-        return record.shiftDay ? <Text strong>{record.shiftDay}</Text> : <Text type="secondary">—</Text>
+        return <Text strong>{record.shiftDay}</Text>
       },
     },
     {
@@ -103,8 +103,6 @@ export function RosterSupportTable({
       key: 'composition-day',
       render: (_, record) => {
         if (record.type === 'service-header') return null
-        if (!record.shiftDay) return <Text type="secondary">—</Text>
-
         const emp = record.position.employeeDay
         if (!emp) return <Text type="secondary">—</Text>
 
@@ -126,7 +124,7 @@ export function RosterSupportTable({
             style={{ cursor: 'pointer', padding: '2px 4px', borderRadius: 2 }}
             title="Нажмите для редактирования"
           >
-            {emp.fullName}
+            {emp.prefix ? <Text strong style={{ marginRight: 4 }}>{emp.prefix}</Text> : null}{emp.fullName}
           </div>
         )
       },
@@ -175,7 +173,7 @@ export function RosterSupportTable({
             style={{ cursor: 'pointer', padding: '2px 4px', borderRadius: 2 }}
             title="Нажмите для редактирования"
           >
-            {emp.fullName}
+            {emp.prefix ? <Text strong style={{ marginRight: 4 }}>{emp.prefix}</Text> : null}{emp.fullName}
           </div>
         )
       },
@@ -223,39 +221,24 @@ export function RosterSupportTable({
       />
 
       {/* Примечания */}
-      <Table
-        columns={[
-          {
-            title: 'Примечания',
-            dataIndex: 'note',
-            key: 'note',
-            render: (_, __, idx) => {
-              if (idx === 0) {
-                return <Text type="secondary">Опоздания, невыход на работу (больничный лист, повестка и т.д.)</Text>
-              }
-              return (
-                <Input
-                  value={notes[idx - 1] ?? ''}
-                  onChange={(e) => handleNoteChange(idx - 1, e.target.value)}
-                  placeholder={`Строка ${idx}`}
-                  size="small"
-                  bordered={false}
-                />
-              )
-            },
-          },
-        ]}
-        dataSource={[{}, {}, {}, {}, {}, {}]}
-        rowKey={(_, idx) => `note-${idx}`}
-        pagination={false}
-        size="small"
-        bordered
-        showHeader={false}
-      />
+      <div style={{ padding: '8px 0' }}>
+        <Text type="secondary">Опоздания, невыход на работу (больничный лист, повестка и т.д.)</Text>
+        {notes.map((note, idx) => (
+          <div key={idx}>
+            <Input
+              value={note}
+              onChange={(e) => handleNoteChange(idx, e.target.value)}
+              placeholder={`Строка ${idx + 1}`}
+              size="small"
+              style={{ marginBottom: 4 }}
+            />
+          </div>
+        ))}
+      </div>
 
       {/* Подписи */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-        <Space>
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '8px 0', rowGap: '20px'}}>
+        <Space style={{ display: 'flex', justifyContent: 'space-between'}}>
           <Text>Врач СМП:</Text>
           <Input
             value={doctorSignature}
@@ -265,7 +248,7 @@ export function RosterSupportTable({
             size="small"
           />
         </Space>
-        <Space>
+        <Space style={{ display: 'flex', justifyContent: 'space-between'}}>
           <Text>Фельдшер (Старший):</Text>
           <Input
             value={nurseSignature}

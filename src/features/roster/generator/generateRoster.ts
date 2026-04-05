@@ -717,38 +717,45 @@ function generateSupportServices(employees: Employee[]): SupportService[] {
     })
   }
 
+  // Определяем тип смены по длительности и времени начала
+  const is24Hour = (emp: Employee): boolean => {
+    return !!emp.shift && emp.shift.durationMinutes > 12 * 60
+  }
+
+  const isDayShift = (emp: Employee): boolean => {
+    if (!emp.shift) return true
+    const startHour = parseInt(emp.shift.start.split(':')[0], 10)
+    return startHour >= 6 && startHour < 18 // Дневная смена: 6:00 - 17:59
+  }
+
+  // Helper для формирования строки смены из данных сотрудника
+  const formatShift = (emp: Employee, reverse: boolean = false): string => {
+    if (!emp.shift) return '8\\20'
+    const start = parseFloat(emp.shift.start).toString()
+    const end = parseFloat(emp.shift.end).toString()
+
+    return reverse ? `${end}\\${start}` : `${start}\\${end}`
+  }
+
+  // Helper для времени прихода
+  const formatArrival = (emp: Employee): string => {
+    if (!emp.shift) return '8:00'
+    return emp.shift.start
+  }
+
   // ДИСПЕТЧЕРСКАЯ
   const dispatchers = findByKeyword(['диспетчер', 'дисп'])
   if (dispatchers.length > 0) {
-    // Helper для формирования строки смены из данных сотрудника
-    const formatShift = (emp: Employee): string => {
-      if (!emp.shift) return '8\\20'
-      const start = parseFloat(emp.shift.start).toString()
-      const end = parseFloat(emp.shift.end).toString()
-      return `${start}\\${end}`
-    }
-
-    // Helper для времени прихода
-    const formatArrival = (emp: Employee): string => {
-      if (!emp.shift) return '8:00'
-      return emp.shift.start
-    }
-
-    // Определяем тип смены по длительности и времени начала
-    const is24Hour = (emp: Employee): boolean => {
-      return !!emp.shift && emp.shift.durationMinutes > 12 * 60
-    }
-
-    const isDayShift = (emp: Employee): boolean => {
-      if (!emp.shift) return true
-      const startHour = parseInt(emp.shift.start.split(':')[0], 10)
-      return startHour >= 6 && startHour < 18 // Дневная смена: 6:00 - 17:59
-    }
 
     // Разделяем на группы
     const dayDispatchers = dispatchers.filter(emp => !is24Hour(emp) && isDayShift(emp))
     const nightDispatchers = dispatchers.filter(emp => !is24Hour(emp) && !isDayShift(emp))
     const shiftDispatchers = dispatchers.filter(emp => is24Hour(emp))
+
+    // Добавляем префиксы
+    dayDispatchers.forEach(e => e.prefix = 'Д')
+    nightDispatchers.forEach(e => e.prefix = 'Н')
+    shiftDispatchers.forEach(e => e.prefix = 'С')
 
     const positions: SupportPosition[] = []
 
@@ -793,6 +800,9 @@ function generateSupportServices(employees: Employee[]): SupportService[] {
   // ЗАПРАВОЧНЫЙ БЛОК
   const fuelBlock = findByKeyword(['заправ', 'блок'])
   if (fuelBlock.length > 0) {
+    // Добавляем префикс 'С' (суточные)
+    fuelBlock.forEach(e => e.prefix = 'С')
+
     services.push({
       name: 'FUEL_BLOCK',
       displayName: 'ЗАПРАВОЧНЫЙ БЛОК',
@@ -811,19 +821,54 @@ function generateSupportServices(employees: Employee[]): SupportService[] {
   }
 
   // УБОРЩИК ПОМЕЩЕНИЙ
-  const cleanersPremises = findByKeyword(['уборщ', 'служ', 'помещ'])
-  if (cleanersPremises.length > 0) {
+  const cleanersPremises = findByKeyword(['уборщ служ', 'помещ'])
+  if(cleanersPremises.length > 0) {
+
+    // Разделяем на группы
+    const dayCleaners = cleanersPremises.filter(emp => !is24Hour(emp) && isDayShift(emp))
+    const nightCleaners = cleanersPremises.filter(emp => !is24Hour(emp) && !isDayShift(emp))
+    const shiftCleaners = cleanersPremises.filter(emp => is24Hour(emp))
+
+    console.log(dayCleaners)
+
+    const positions: SupportPosition[] = []
+
+    // Суточные уборщики помещений — отдельные строки с обеими сменами
+    shiftCleaners.forEach((emp, i) => {
+      positions.push({
+        key: `cleaner-premises-shift-${i}`,
+        shiftDay: '8.30\\20.30',
+        shiftNight: '20.30\\8.30',
+        employeeDay: emp,
+        employeeNight: emp,
+        arrivalTimeDay: formatArrival(emp),
+        arrivalTimeNight: formatArrival(emp),
+      })
+    })
+
+    // Формируем пары: дневной + ночной в одной строке
+    const maxPairs = Math.max(dayCleaners.length, nightCleaners.length)
+    for (let i = 0; i < maxPairs; i++) {
+      const dayEmp = dayCleaners[i]
+      const nightEmp = nightCleaners[i]
+      positions.push({
+        key: `cleaner-premises-${i}`,
+        shiftDay: dayEmp ? formatShift(dayEmp) : '',
+        shiftNight: nightEmp ? formatShift(nightEmp) : '',
+        employeeDay: dayEmp,
+        employeeNight: nightEmp,
+        arrivalTimeDay: dayEmp ? formatArrival(dayEmp) : '',
+        arrivalTimeNight: nightEmp ? formatArrival(nightEmp) : '',
+      })
+    }
+
+    if (positions.length > 0) {
     services.push({
       name: 'CLEANER_PREMISES',
       displayName: 'УБОРЩИК ПОМЕЩЕНИЙ (СЛУЖЕБНЫХ)',
-      positions: cleanersPremises.slice(0, 4).map((emp, idx) => ({
-        key: `cleaner-premises-${idx}`,
-        shiftDay: '8\\16',
-        shiftNight: '',
-        employeeDay: emp,
-        arrivalTimeDay: '8:00',
-      })),
+      positions,
     })
+    }
   }
 
   // УБОРЩИК ТЕРРИТОРИИ
@@ -835,7 +880,7 @@ function generateSupportServices(employees: Employee[]): SupportService[] {
       positions: [
         {
           key: 'cleaner-territory-1',
-          shiftDay: '8\\15',
+          shiftDay: '8\\16.30',
           shiftNight: '',
           employeeDay: cleanersTerritory[0],
           arrivalTimeDay: '8:00',

@@ -186,7 +186,6 @@ export function RosterBrigadesTable({ brigades, onChange }: RosterBrigadesTableP
           border-color: #a5a5a5 !important;
         }
         .roster-brigades-table .employee-name:hover {
-          background-color: #ffffff;
           border-radius: 4px;
         }
       `}</style>
