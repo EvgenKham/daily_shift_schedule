@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(mkdir *)"
+      "Bash(mkdir *)",
+      "Read(C:\\Users\\EvgenKh\\Downloads/**)",
+      "Bash(npx *)"
     ]
-  }
+  },
+  "$version": 3
 }
